@@ -5,39 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0a1020">
-<meta name="description" content="Mesa de juegos con una PlayStation 2: arrastra un disco a la bandeja y juega en el navegador.">
+<meta name="description" content="Silent Hill Origins (PSP) en el navegador: elige tu ISO, arrastra el disco a la bandeja y juega.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a1020'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%233d7bff' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%238db0ff'/%3E%3C/svg%3E">
-<title>Mesa de juegos · PlayStation 2</title>
-
-<!--
-  ─────────────────────────────────────────────────────────────────────────
-  COOP / COEP EN GITHUB PAGES  (necesario para SharedArrayBuffer)
-  ─────────────────────────────────────────────────────────────────────────
-  Un service worker SOLO puede registrarse desde tu propio origen, así que
-  coi-serviceworker NO funciona cargado desde un CDN. Además, la URL
-  https://cdn.jsdelivr.net/gh/gzguidoti/coi-serviceworker/... devuelve 404
-  (el repositorio real es gzuidhof/coi-serviceworker).
-
-  Solución: sube "coi-serviceworker.js" (incluido junto a este archivo, es la
-  versión oficial MIT) a la MISMA carpeta que index.html.
-  Debe ser el primer <script> de la página.
--->
+<title>Mesa de juegos · Silent Hill Origins</title>
+<!-- coi-serviceworker.js debe estar en la MISMA carpeta que index.html (Play! usa hilos y necesita SharedArrayBuffer) -->
 <script src="coi-serviceworker.js"></script>
-
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Hanken+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
 
 <style>
 :root{
-  --wall-a:#0a1020; --wall-b:#111b34;
-  --shelf-wood:#3a2418;
-  --blue:#3d7bff; --blue-soft:#8db0ff;
-  --amber:#ffb454;
+  --wall-a:#0a1020; --wall-b:#111b34; --shelf-wood:#3a2418;
+  --blue:#3d7bff; --blue-soft:#8db0ff; --amber:#ffb454;
   --ink:#e9edf6; --ink-dim:#97a3bd;
   --font-display:'Big Shoulders Display','Arial Narrow','Roboto Condensed',Impact,sans-serif;
   --font-ui:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-  --cw:clamp(66px,6.3vw,98px);              /* ancho de cada caja de juego */
+  --cw:clamp(66px,6.3vw,98px);
 }
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;height:100%}
@@ -45,50 +29,36 @@ body{background:#050813;color:var(--ink);font-family:var(--font-ui);overflow:hid
 button{font:inherit;color:inherit;cursor:pointer}
 :focus-visible{outline:2px solid var(--amber);outline-offset:3px}
 
-/* ═════════════ ESCENA ═════════════ */
-.scene{
-  position:relative;height:100vh;height:100dvh;overflow:hidden;isolation:isolate;
-  font-size:clamp(6px,min(1.2vw,1.85vh),14.5px);   /* 1em = unidad de la consola */
-  user-select:none;-webkit-user-select:none;
-}
+/* ═════ ESCENA ═════ */
+.scene{position:relative;height:100vh;height:100dvh;overflow:hidden;isolation:isolate;
+  font-size:clamp(6px,min(1.2vw,1.85vh),14.5px);user-select:none;-webkit-user-select:none}
 .is-playing .scene{visibility:hidden}
 .wall{position:absolute;inset:0;z-index:-3;background:
   radial-gradient(36% 32% at 80% 12%,rgba(255,180,84,.20),transparent 70%),
   radial-gradient(44% 36% at 46% 60%,rgba(61,123,255,.16),transparent 72%),
   linear-gradient(180deg,var(--wall-a),var(--wall-b) 55%,#0c142a)}
-.wall::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.018) 0 1px,transparent 1px 96px)}
 .desk{position:absolute;left:0;right:0;top:50%;bottom:0;z-index:-2;background:
   linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,0) 26%),
   repeating-linear-gradient(90deg,rgba(255,255,255,.018) 0 2px,transparent 2px 11px),
-  repeating-linear-gradient(90deg,rgba(0,0,0,.22) 0 1px,transparent 1px 37px),
-  linear-gradient(180deg,#2d1b12,#1b1009);
-  box-shadow:inset 0 1px 0 rgba(255,180,84,.22)}
+  linear-gradient(180deg,#2d1b12,#1b1009);box-shadow:inset 0 1px 0 rgba(255,180,84,.22)}
 .desk-glow{position:absolute;left:50%;top:62%;width:72em;height:28em;margin-left:-36em;z-index:-1;
   background:radial-gradient(closest-side,rgba(61,123,255,.30),transparent);opacity:.25;transition:opacity 1.4s ease;pointer-events:none}
 .is-on .desk-glow{opacity:.9}
 
-/* Texto de bienvenida */
 .intro{position:absolute;z-index:3;left:clamp(16px,3.2vw,56px);top:clamp(16px,6vh,60px);width:min(26rem,30vw)}
 .intro h1{margin:0 0 .7rem;font:800 clamp(2.2rem,4.6vw,4.2rem)/.9 var(--font-display);letter-spacing:.01em;color:#f3f6fc}
 .intro p{margin:0 0 .6rem;font-size:.95rem;line-height:1.55;color:var(--ink-dim);max-width:34ch}
-.intro-meta{display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;align-items:center;margin-top:1rem;font-size:.8rem}
-.status{display:inline-flex;align-items:center;gap:.45rem;color:var(--ink-dim)}
-.status::before{content:"";width:.5rem;height:.5rem;border-radius:50%;background:#e0623a;box-shadow:0 0 .6rem #e0623a}
-.status[data-ok="true"]::before{background:#3ddc84;box-shadow:0 0 .6rem #3ddc84}
+.intro-meta{margin-top:1rem;font-size:.8rem}
 .linklike{background:none;border:0;padding:0;color:var(--blue-soft);text-decoration:underline;text-underline-offset:3px;font-size:.8rem}
 
-/* ═════════════ ESTANTERÍA ═════════════ */
+/* ═════ ESTANTERÍA ═════ */
 .shelf{position:absolute;z-index:3;right:clamp(12px,2.6vw,44px);top:clamp(22px,6.5vh,64px);
   width:calc(var(--cw)*3 + 92px);padding:12px 14px 6px;border-radius:6px 6px 2px 2px;
   max-height:calc(50vh - clamp(22px,6.5vh,64px) - 8px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;
-  background:
-    linear-gradient(90deg,rgba(0,0,0,.35),transparent 8%,transparent 92%,rgba(0,0,0,.35)),
-    linear-gradient(180deg,#160d08,#22140c);
+  background:linear-gradient(90deg,rgba(0,0,0,.35),transparent 8%,transparent 92%,rgba(0,0,0,.35)),linear-gradient(180deg,#160d08,#22140c);
   box-shadow:0 0 0 5px var(--shelf-wood),0 0 0 6px rgba(255,180,84,.14),0 30px 60px -20px rgba(0,0,0,.85),inset 0 0 40px rgba(0,0,0,.6)}
 .shelf-row{display:flex;justify-content:flex-start;align-items:flex-end;gap:14px;padding:16px 6px 0;min-height:calc(var(--cw)*1.41 + 24px)}
 .plank{height:12px;margin:0 -14px;background:linear-gradient(180deg,#5a3a26,#3a2418 60%,#24150d);box-shadow:0 6px 10px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,200,140,.25)}
-.lamp{position:absolute;z-index:3;right:calc(clamp(12px,2.6vw,44px) + (var(--cw)*3 + 92px)/2 - 6rem);top:calc(clamp(22px,6.5vh,64px) - 22px);width:12rem;height:6px;border-radius:3px;
-  background:linear-gradient(#ffe2b0,var(--amber));box-shadow:0 0 30px 10px rgba(255,180,84,.35),0 0 90px 36px rgba(255,180,84,.14)}
 
 .nook{position:relative;flex:none;width:var(--cw);height:calc(var(--cw)*1.41)}
 .nook::before{content:"";position:absolute;inset:0;border:1px dashed rgba(255,255,255,.16);border-radius:3px;opacity:0;transition:opacity .3s}
@@ -113,7 +83,6 @@ button{font:inherit;color:inherit;cursor:pointer}
 .case-title{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:26% 9% 7% 12%;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);
   font:800 clamp(.85rem,1.35vw,1.1rem)/1.02 var(--font-display);letter-spacing:.015em;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
 
-/* Sobre para ISO propia */
 .sleeve{cursor:pointer;border-radius:3px;display:flex;flex-direction:column;align-items:center;gap:5%;padding:9% 8% 24%;color:#2a1a0e;
   background:linear-gradient(135deg,rgba(255,255,255,.16),transparent 42%),repeating-linear-gradient(90deg,rgba(0,0,0,.05) 0 2px,transparent 2px 5px),#b48e62;
   box-shadow:3px 6px 16px rgba(0,0,0,.65),inset 0 0 0 1px rgba(255,255,255,.14);transition:transform .22s ease}
@@ -124,83 +93,57 @@ button{font:inherit;color:inherit;cursor:pointer}
 .sleeve.has-file .sleeve-disc{background:radial-gradient(circle closest-side,#1a100a 0 10%,transparent 11%),radial-gradient(circle closest-side,hsl(215,65%,34%) 0 92%,#cfd6e6 93%)}
 .sleeve-name{font:800 clamp(.85rem,1.3vw,1.05rem)/1 var(--font-display);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sleeve-sub{font-size:.62rem;opacity:.78;text-align:center;line-height:1.1}
-.sleeve-change{position:absolute;left:50%;bottom:5px;transform:translateX(-50%);z-index:2;border:0;border-radius:99px;padding:2px 9px;
-  background:rgba(30,18,8,.82);color:#f3dcbc;font-size:.62rem}
+.sleeve-change{position:absolute;left:50%;bottom:5px;transform:translateX(-50%);z-index:2;border:0;border-radius:99px;padding:2px 9px;background:rgba(30,18,8,.82);color:#f3dcbc;font-size:.62rem}
 .sleeve-change[hidden]{display:none}
 
-/* ═════════════ CONSOLA PS2 (CSS 3D) ═════════════ */
-.ps2-stage{position:absolute;left:50%;bottom:4%;width:52em;height:38em;margin-left:-26em;z-index:2;
-  perspective:95em;perspective-origin:50% 22%;pointer-events:none}
+/* ═════ CONSOLA PS2 (CSS 3D) ═════ */
+.ps2-stage{position:absolute;left:50%;bottom:4%;width:52em;height:38em;margin-left:-26em;z-index:2;perspective:95em;perspective-origin:50% 22%;pointer-events:none}
 .ps2-shadow{position:absolute;left:50%;top:40%;width:0;height:0}
 .ps2-shadow::before{content:"";position:absolute;left:-29em;top:-5em;width:58em;height:20em;border-radius:50%;
   background:radial-gradient(closest-side,rgba(0,0,0,.7),rgba(0,0,0,.35) 60%,transparent);filter:blur(.5em)}
-.ps2-shadow::after{content:"";position:absolute;left:-26em;top:6.5em;width:22em;height:9em;border-radius:50%;
-  background:radial-gradient(closest-side,rgba(0,0,0,.5),transparent);opacity:0;transition:opacity 1s ease}
-.is-open .ps2-shadow::after{opacity:1}
-.ps2{position:absolute;left:50%;top:40%;width:44em;height:11.4em;margin:-5.7em 0 0 -22em;
-  transform-style:preserve-3d;transform:rotateX(-30deg) rotateY(-16deg)}
+.ps2{position:absolute;left:50%;top:40%;width:44em;height:11.4em;margin:-5.7em 0 0 -22em;transform-style:preserve-3d;transform:rotateX(-30deg) rotateY(-16deg)}
 .face{position:absolute}
 .f-front{left:0;top:0;width:44em;height:11.4em;transform:translateZ(13.25em);border-radius:.3em;
-  background:linear-gradient(180deg,#2c2e39 0,#191a21 28%,#121319 100%);
-  box-shadow:inset 0 .14em 0 rgba(255,255,255,.14),inset 0 -.25em .7em rgba(0,0,0,.65)}
+  background:linear-gradient(180deg,#2c2e39 0,#191a21 28%,#121319 100%);box-shadow:inset 0 .14em 0 rgba(255,255,255,.14),inset 0 -.25em .7em rgba(0,0,0,.65)}
 .f-top{left:0;top:-7.55em;width:44em;height:26.5em;transform:rotateX(90deg) translateZ(5.7em);border-radius:.3em;
-  background:linear-gradient(165deg,#343745 0,#1d1e26 34%,#15161c 100%);
-  box-shadow:inset 0 0 2.4em rgba(0,0,0,.55),inset 0 0 0 .1em rgba(255,255,255,.05);transition:box-shadow 1.2s}
+  background:linear-gradient(165deg,#343745 0,#1d1e26 34%,#15161c 100%);box-shadow:inset 0 0 2.4em rgba(0,0,0,.55),inset 0 0 0 .1em rgba(255,255,255,.05);transition:box-shadow 1.2s}
 .is-on .f-top{box-shadow:inset 0 0 2.4em rgba(0,0,0,.55),inset 0 0 0 .1em rgba(255,255,255,.05),inset 0 -3em 4em -2em rgba(61,123,255,.28)}
 .f-right{left:8.75em;top:0;width:26.5em;height:11.4em;transform:rotateY(90deg) translateZ(22em);border-radius:.3em;
   background:repeating-linear-gradient(90deg,rgba(0,0,0,.35) 0 .3em,transparent .3em 1.1em),linear-gradient(90deg,#1d1e26,#101116)}
-.f-top .vents{position:absolute;left:3em;right:3em;top:2.2em;height:6em;border-radius:.4em;
-  background:repeating-linear-gradient(90deg,rgba(0,0,0,.6) 0 .28em,rgba(255,255,255,.035) .28em .9em);opacity:.55}
-.f-top .mark{position:absolute;left:3.2em;bottom:3.2em;font:300 3.1em/1 var(--font-ui);letter-spacing:.16em;color:#cfd7ea;
-  text-shadow:0 .03em 0 rgba(255,255,255,.25);transition:text-shadow 1.2s}
+.f-top .vents{position:absolute;left:3em;right:3em;top:2.2em;height:6em;border-radius:.4em;background:repeating-linear-gradient(90deg,rgba(0,0,0,.6) 0 .28em,rgba(255,255,255,.035) .28em .9em);opacity:.55}
+.f-top .mark{position:absolute;left:3.2em;bottom:3.2em;font:300 3.1em/1 var(--font-ui);letter-spacing:.16em;color:#cfd7ea;text-shadow:0 .03em 0 rgba(255,255,255,.25);transition:text-shadow 1.2s}
 .f-top .mark b{font-weight:600;font-size:.7em;vertical-align:.55em;margin-left:.2em;letter-spacing:0}
 .is-on .f-top .mark{text-shadow:0 0 .6em rgba(110,160,255,.95)}
-.f-top .sheen{position:absolute;inset:0;border-radius:inherit;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.07) 46%,transparent 60%)}
 
-.tray-slot{position:absolute;left:2.4em;top:6.15em;width:20em;height:2.4em;border-radius:.35em;background:#040407;
-  box-shadow:inset 0 .25em .5em #000,0 0 0 .1em rgba(255,255,255,.07)}
+.tray-slot{position:absolute;left:2.4em;top:6.15em;width:20em;height:2.4em;border-radius:.35em;background:#040407;box-shadow:inset 0 .25em .5em #000,0 0 0 .1em rgba(255,255,255,.07)}
 .led{position:absolute;left:24.6em;top:2.9em;width:.8em;height:.8em;border-radius:50%;background:#d9640a;box-shadow:0 0 .9em #f97316;transition:background .4s,box-shadow .4s}
 .is-on .led{background:#3ddc84;box-shadow:0 0 1em #3ddc84}
-.eject{position:absolute;left:24.3em;top:6.3em;width:1.9em;height:1.9em;border-radius:50%;
-  background:radial-gradient(circle at 35% 30%,#3a3d4a,#15161c);box-shadow:inset 0 0 0 .12em #0a0a0d,0 .1em .2em rgba(0,0,0,.6)}
-.eject::after{content:"";position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);border:.4em solid transparent;border-bottom:.55em solid #8a90a3;border-top:0}
+.eject{position:absolute;left:24.3em;top:6.3em;width:1.9em;height:1.9em;border-radius:50%;background:radial-gradient(circle at 35% 30%,#3a3d4a,#15161c);box-shadow:inset 0 0 0 .12em #0a0a0d,0 .1em .2em rgba(0,0,0,.6)}
 .reset{position:absolute;left:24.85em;top:4.4em;width:.9em;height:.9em;border-radius:50%;background:radial-gradient(circle at 35% 30%,#3a3d4a,#15161c);box-shadow:inset 0 0 0 .1em #0a0a0d}
 .port{position:absolute;top:2.2em;width:5.4em;height:3.7em;border-radius:.5em;background:#06070a;box-shadow:inset 0 .2em .5em #000,0 0 0 .12em #2a2d38}
-.port::after{content:"";position:absolute;left:1.1em;right:1.1em;top:1.1em;height:1.5em;border-radius:.2em;background:repeating-linear-gradient(90deg,#3b3f4d 0 .18em,transparent .18em .5em)}
 .p1{left:28.4em}.p2{left:34.4em}
 .card{position:absolute;top:7em;width:4.9em;height:1.3em;border-radius:.3em;background:#06070a;box-shadow:inset 0 .15em .3em #000,0 0 0 .1em #2a2d38}
 .c1{left:28.7em}.c2{left:34.7em}
 
-/* Bandeja: se desliza sobre el eje Z real */
-.tray{position:absolute;left:2.6em;top:0;width:19.6em;height:11.4em;transform-style:preserve-3d;
-  transform:translateZ(13.33em);transition:transform 1.3s cubic-bezier(.62,0,.22,1)}
+.tray{position:absolute;left:2.6em;top:0;width:19.6em;height:11.4em;transform-style:preserve-3d;transform:translateZ(13.33em);transition:transform 1.3s cubic-bezier(.62,0,.22,1)}
 .is-open .tray{transform:translateZ(30.75em)}
-.tray-lip{position:absolute;left:0;top:6.25em;width:19.6em;height:2.2em;border-radius:.25em .25em .4em .4em;
-  background:linear-gradient(180deg,#2a2c37,#14151b);box-shadow:inset 0 .12em 0 rgba(255,255,255,.16),0 .15em .4em rgba(0,0,0,.5)}
-.tray-lip::after{content:"";position:absolute;left:36%;right:36%;top:50%;height:.14em;background:rgba(255,255,255,.12);border-radius:1em}
-.tray-plate{position:absolute;left:0;top:-3.25em;width:19.6em;height:19em;transform-style:preserve-3d;
-  transform:translateZ(-9.5em) rotateX(90deg);border-radius:.5em .5em .3em .3em;
+.tray-lip{position:absolute;left:0;top:6.25em;width:19.6em;height:2.2em;border-radius:.25em .25em .4em .4em;background:linear-gradient(180deg,#2a2c37,#14151b);box-shadow:inset 0 .12em 0 rgba(255,255,255,.16),0 .15em .4em rgba(0,0,0,.5)}
+.tray-plate{position:absolute;left:0;top:-3.25em;width:19.6em;height:19em;transform-style:preserve-3d;transform:translateZ(-9.5em) rotateX(90deg);border-radius:.5em .5em .3em .3em;
   background:linear-gradient(180deg,#1e2029,#13141a);box-shadow:inset 0 0 0 .12em rgba(255,255,255,.07)}
 .tray-plate::before{content:"";position:absolute;left:.6em;top:.3em;width:18.4em;height:18.4em;border-radius:50%;
   background:radial-gradient(circle closest-side,#07080b 0 93%,#2a2d38 94% 97%,transparent 98%);transform:translateZ(.04em)}
-.tray-plate::after{content:"";position:absolute;left:.6em;top:.3em;width:18.4em;height:18.4em;border-radius:50%;border:.16em dashed transparent;
-  transform:translateZ(.08em);transition:border-color .25s,box-shadow .25s}
+.tray-plate::after{content:"";position:absolute;left:.6em;top:.3em;width:18.4em;height:18.4em;border-radius:50%;border:.16em dashed transparent;transform:translateZ(.08em);transition:border-color .25s,box-shadow .25s}
 .is-open:not(.is-armed):not(.is-busy) .tray-plate::after{animation:breathe 3.8s ease-in-out infinite}
 .is-armed .tray-plate::after{border-color:rgba(141,176,255,.6);animation:ring 16s linear infinite}
 .is-target .tray-plate::after{border-color:#a9c4ff;box-shadow:0 0 2.2em rgba(61,123,255,.85),inset 0 0 2em rgba(61,123,255,.55)}
 @keyframes ring{from{transform:translateZ(.08em) rotate(0)}to{transform:translateZ(.08em) rotate(360deg)}}
 @keyframes breathe{0%,100%{box-shadow:0 0 0 rgba(61,123,255,0)}50%{box-shadow:0 0 1.6em rgba(61,123,255,.5),inset 0 0 1.2em rgba(61,123,255,.3);border-color:rgba(141,176,255,.35)}}
 
-/* Disco */
 .disc{position:absolute;left:1.3em;top:1em;width:17em;height:17em;border-radius:50%;opacity:0;transform:translateZ(14em);
-  background:
-    radial-gradient(circle closest-side at 50% 50%,transparent 0 12%,rgba(232,238,250,.6) 12.5% 27%,transparent 27.5%),
+  background:radial-gradient(circle closest-side at 50% 50%,transparent 0 12%,rgba(232,238,250,.6) 12.5% 27%,transparent 27.5%),
     radial-gradient(circle closest-side at 50% 50%,transparent 0 27.5%,hsl(var(--h,220),62%,30%) 28% 95%,transparent 95.5%),
     conic-gradient(from 30deg,#e9edf6,#aab8d6,#f7f9fd,#c6b8e4,#a6d7ea,#f3f6fb,#e9edf6);
-  -webkit-mask:radial-gradient(circle closest-side at 50% 50%,transparent 0 12%,#000 12.6%);
-          mask:radial-gradient(circle closest-side at 50% 50%,transparent 0 12%,#000 12.6%)}
-.disc::after{content:"";position:absolute;inset:0;border-radius:50%;
-  background:conic-gradient(from 200deg,transparent 0 20%,rgba(255,255,255,.24) 26%,transparent 34% 70%,rgba(255,255,255,.18) 76%,transparent 84%)}
+  -webkit-mask:radial-gradient(circle closest-side at 50% 50%,transparent 0 12%,#000 12.6%);mask:radial-gradient(circle closest-side at 50% 50%,transparent 0 12%,#000 12.6%)}
 .disc-label{position:absolute;left:12%;right:12%;top:63%;text-align:center;z-index:1}
 .disc-t{display:block;font:800 1.25em/1 var(--font-display);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 .05em .1em rgba(0,0,0,.5)}
 .disc-s{display:block;margin-top:.35em;font:500 .5em/1 var(--font-ui);letter-spacing:.22em;color:rgba(255,255,255,.72)}
@@ -209,18 +152,14 @@ button{font:inherit;color:inherit;cursor:pointer}
 @keyframes disc-in{0%{opacity:0;transform:translateZ(16em) rotate(-40deg) scale(.5)}55%{opacity:1}100%{opacity:1;transform:translateZ(.3em) rotate(0) scale(1)}}
 @keyframes disc-out{0%{opacity:1;transform:translateZ(.3em) scale(1)}100%{opacity:0;transform:translateZ(9em) scale(.8)}}
 
-/* ═════════════ ARRANQUE, REPRODUCTOR, CONTROLES ═════════════ */
+/* ═════ ARRANQUE ═════ */
 .curtain{position:fixed;inset:0;z-index:19;background:#02030a;opacity:0;pointer-events:none;transition:opacity .35s ease}
 .curtain.is-on{opacity:1}
 .boot{position:fixed;inset:0;z-index:20;display:grid;place-items:center;overflow:hidden;
   background:radial-gradient(120% 90% at 50% 100%,#0a1a5c 0,#040720 45%,#01020a 100%);
   opacity:0;visibility:hidden;transition:opacity .7s ease,visibility 0s .7s}
 .boot.is-visible{opacity:1;visibility:visible;transition:opacity .7s ease,visibility 0s}
-.towers{position:absolute;inset:0;pointer-events:none}
-.towers i{position:absolute;bottom:0;left:var(--x);width:var(--w);height:var(--h);opacity:var(--o);transform-origin:bottom;
-  background:linear-gradient(0deg,rgba(141,176,255,0),rgba(141,176,255,.38) 55%,rgba(220,235,255,.7));animation:tower var(--t) ease-in-out var(--d) infinite alternate}
-@keyframes tower{from{transform:scaleY(.22)}to{transform:scaleY(1)}}
-.boot-center{position:relative;text-align:center;padding:0 20px}
+.boot-center{text-align:center;padding:0 20px}
 .boot-mark{font:300 clamp(2.2rem,6.4vw,5rem)/1 var(--font-ui);letter-spacing:.32em;text-indent:.32em;color:#eef3ff;text-shadow:0 0 30px rgba(120,160,255,.8);opacity:0;transform:translateY(8px)}
 .boot-mark b{font-weight:600;font-size:.62em;vertical-align:.7em;margin-left:.15em;letter-spacing:0}
 .boot.is-visible .boot-mark{animation:mark-in 1.6s .9s cubic-bezier(.2,.7,.2,1) forwards}
@@ -234,30 +173,26 @@ button{font:inherit;color:inherit;cursor:pointer}
 .boot.is-visible .boot-bar i{animation:bar var(--boot-ms,4200ms) cubic-bezier(.3,.6,.3,1) forwards}
 @keyframes bar{to{transform:scaleX(.96)}}
 
+/* ═════ REPRODUCTOR (Play! Web) ═════ */
 .player{position:fixed;inset:0;z-index:5;background:#000;visibility:hidden;opacity:0}
 .is-playing .player{visibility:visible;opacity:1}
-.player-stage{position:absolute;inset:0}
+.player-stage{position:absolute;left:0;right:0;top:0;bottom:56px}
 .player-stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
-.player-error{position:absolute;inset:0;z-index:2;display:none;place-items:center;padding:20px;background:rgba(2,4,12,.88);backdrop-filter:blur(6px)}
-.player-error.is-visible{display:grid}
-.err-card{width:min(540px,100%);max-height:100%;overflow:auto;padding:26px 26px 22px;border-radius:14px;background:#0e1424;border:1px solid rgba(141,176,255,.25);box-shadow:0 30px 80px rgba(0,0,0,.6)}
-.err-card h2{margin:0 0 .5rem;font:800 1.9rem/1 var(--font-display);color:#fff}
-.err-card p{margin:0 0 .8rem;color:var(--ink-dim);line-height:1.5;font-size:.95rem;word-break:break-word}
-.err-card ul{margin:0 0 1.2rem;padding-left:1.1rem;color:#c3cde4;font-size:.88rem;line-height:1.5}
-.err-card li+li{margin-top:.4rem}
-.err-card code{font-size:.85em;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,.08)}
-.err-actions{display:flex;flex-wrap:wrap;gap:10px}
-.btn{display:inline-block;border:1px solid rgba(141,176,255,.35);background:rgba(61,123,255,.16);color:#fff;border-radius:9px;padding:9px 15px;font-size:.9rem;text-decoration:none;line-height:1.2}
+.player-bar{position:absolute;left:0;right:0;bottom:0;height:56px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:8px max(14px,env(safe-area-inset-left)) max(8px,env(safe-area-inset-bottom));background:#0a0f1e;border-top:1px solid rgba(141,176,255,.2);overflow:hidden}
+.player-info{flex:1 1 220px;min-width:0;font-size:.82rem;line-height:1.3;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.player-info b{color:#fff;font-weight:600}
+.btn{display:inline-block;border:1px solid rgba(141,176,255,.35);background:rgba(61,123,255,.16);color:#fff;border-radius:9px;padding:7px 13px;font-size:.85rem;text-decoration:none;line-height:1.2;white-space:nowrap}
 .btn:hover{background:rgba(61,123,255,.38)}
 .btn.primary{background:var(--blue);border-color:var(--blue)}
+.btn[hidden]{display:none}
 
 .fabs{position:fixed;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));z-index:30;display:flex;gap:10px}
 .fab{position:relative;width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.16);display:grid;place-items:center;
   background:rgba(14,18,32,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:background .2s,border-color .2s,opacity .2s}
 .fab:hover{background:rgba(61,123,255,.38);border-color:rgba(141,176,255,.6)}
 .fab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.fab::after{content:attr(data-tip);position:absolute;top:calc(100% + 8px);right:0;white-space:nowrap;font-size:.75rem;padding:5px 9px;border-radius:6px;
-  background:rgba(8,11,22,.94);opacity:0;transform:translateY(-4px);transition:.15s;pointer-events:none}
+.fab::after{content:attr(data-tip);position:absolute;top:calc(100% + 8px);right:0;white-space:nowrap;font-size:.75rem;padding:5px 9px;border-radius:6px;background:rgba(8,11,22,.94);opacity:0;transform:translateY(-4px);transition:.15s;pointer-events:none}
 .fab:hover::after,.fab:focus-visible::after{opacity:1;transform:none}
 .fab-play{display:none}
 .is-playing .fab-play{display:grid}
@@ -267,36 +202,30 @@ button{font:inherit;color:inherit;cursor:pointer}
 .is-fs .ico-enter-fs{display:none}
 .is-fs .ico-exit-fs{display:block}
 
-.toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));z-index:40;transform:translate(-50%,20px);max-width:min(90vw,480px);
-  padding:10px 16px;border-radius:10px;background:rgba(10,14,26,.95);border:1px solid rgba(255,255,255,.14);font-size:.9rem;line-height:1.4;
-  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+.toast{position:fixed;left:50%;bottom:max(70px,env(safe-area-inset-bottom));z-index:40;transform:translate(-50%,20px);max-width:min(90vw,480px);
+  padding:10px 16px;border-radius:10px;background:rgba(10,14,26,.95);border:1px solid rgba(255,255,255,.14);font-size:.9rem;line-height:1.4;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
 .toast.is-on{opacity:1;transform:translate(-50%,0)}
 
-.ghost{position:fixed;left:0;top:0;z-index:100;pointer-events:none;scale:1.05;rotate:-3deg;transition:scale .18s,rotate .18s;
-  filter:drop-shadow(0 18px 24px rgba(0,0,0,.6));will-change:translate}
+.ghost{position:fixed;left:0;top:0;z-index:100;pointer-events:none;scale:1.05;rotate:-3deg;transition:scale .18s,rotate .18s;filter:drop-shadow(0 18px 24px rgba(0,0,0,.6));will-change:translate}
 .ghost.is-over{scale:.62;rotate:0deg}
 .ghost .case,.ghost .sleeve{transform:none!important}
 
-/* ═════════════ RESPONSIVE ═════════════ */
 @media (max-width:900px) and (orientation:portrait){
   body{overflow:auto}
   .scene{height:max(100dvh,780px)}
   .intro{left:16px;right:70px;width:auto;top:16px}
   .intro h1{font-size:2rem;margin-bottom:.4rem}
   .intro p{font-size:.85rem}
-  .intro .intro-alt,.intro-meta .status{display:none}
+  .intro .intro-alt{display:none}
   .ps2-stage{top:140px;bottom:auto}
   .desk{top:205px}
   .shelf{left:50%;right:auto;top:auto;bottom:18px;transform:translateX(-50%);max-height:none;overflow:visible}
-  .lamp{display:none}
+  .player-bar{height:auto;min-height:56px}
 }
-@media (max-height:560px) and (orientation:landscape){
-  body{overflow:auto}
-  .scene{height:560px}
-}
+@media (max-height:560px) and (orientation:landscape){body{overflow:auto}.scene{height:560px}}
 @media (prefers-reduced-motion:reduce){
   .tray{transition-duration:.01s}
-  .towers i,.tray-plate::after{animation:none!important}
+  .tray-plate::after{animation:none!important}
   .disc.is-in,.disc.is-out{animation-duration:.01s}
 }
 </style>
@@ -304,7 +233,6 @@ button{font:inherit;color:inherit;cursor:pointer}
 
 <body>
 
-<!-- ═════════════ MESA ═════════════ -->
 <main class="scene is-open" id="scene" aria-label="Mesa de juegos">
   <div class="wall"></div>
   <div class="desk"></div>
@@ -312,19 +240,18 @@ button{font:inherit;color:inherit;cursor:pointer}
 
   <section class="intro">
     <h1>Mesa de juegos</h1>
-    <p>Arrastra un disco de la estantería hasta la bandeja de la PS2 para encenderla.</p>
-    <p class="intro-alt">¿Tienes tu propia ISO? Suéltala sobre la bandeja o usa el sobre de la estantería.</p>
+    <p>Arrastra un disco de la estantería hasta la bandeja de la consola para encenderla.</p>
+    <p class="intro-alt">Primero elige tu ISO de Silent Hill Origins (versión PSP). Se queda en tu navegador: no se sube a ningún sitio.</p>
     <div class="intro-meta">
-      <span class="status" id="isoStatus" data-ok="false" role="status"></span>
+      <button class="linklike" id="isoBtn" type="button">Elegir ISO</button> <span id="isoName" style="color:var(--ink-dim)"></span><br>
       <button class="linklike" id="soundBtn" type="button" aria-pressed="true">Sonido activado</button>
     </div>
   </section>
 
-  <!-- Consola: cuboide CSS 3D con bandeja real en el eje Z -->
   <div class="ps2-stage" aria-hidden="true">
     <div class="ps2-shadow"></div>
     <div class="ps2" id="ps2">
-      <div class="face f-top"><div class="vents"></div><div class="mark">PlayStation<b>2</b></div><div class="sheen"></div></div>
+      <div class="face f-top"><div class="vents"></div><div class="mark">PSP</div></div>
       <div class="face f-right"></div>
       <div class="face f-front">
         <div class="tray-slot"></div>
@@ -334,7 +261,7 @@ button{font:inherit;color:inherit;cursor:pointer}
       <div class="tray">
         <div class="tray-plate" id="plate">
           <div class="disc" id="disc">
-            <div class="disc-label"><span class="disc-t" id="discTitle"></span><span class="disc-s">PlayStation 2</span></div>
+            <div class="disc-label"><span class="disc-t" id="discTitle"></span><span class="disc-s">UMD · PSP</span></div>
           </div>
         </div>
         <div class="tray-lip"></div>
@@ -342,46 +269,34 @@ button{font:inherit;color:inherit;cursor:pointer}
     </div>
   </div>
 
-  <div class="lamp" aria-hidden="true"></div>
   <aside class="shelf" aria-label="Estantería de juegos"><div id="shelfRows"></div></aside>
 </main>
 
 <div class="curtain" id="curtain"></div>
 
-<!-- ═════════════ REPRODUCTOR ═════════════ -->
+<!-- Reproductor: Play! Web + barra de ayuda -->
 <div class="player" id="player">
   <div class="player-stage" id="playerStage"></div>
-  <div class="player-error" id="playerError" role="alert">
-    <div class="err-card">
-      <h2 id="errTitle">No se pudo iniciar el juego</h2>
-      <p id="errMsg"></p>
-      <ul id="errTips"></ul>
-      <div class="err-actions">
-        <button class="btn primary" id="errBack" type="button">Volver a la mesa</button>
-        <button class="btn" id="errRetry" type="button">Reintentar</button>
-        <a class="btn" id="errFallback" target="_blank" rel="noopener">Abrir Play! Web</a>
-      </div>
-    </div>
+  <div class="player-bar">
+    <div class="player-info" id="playerInfo"></div>
+    <button class="btn" id="backBtn" type="button">Volver a la mesa</button>
   </div>
 </div>
 
-<!-- ═════════════ PANTALLA DE ARRANQUE ═════════════ -->
 <div class="boot" id="boot" role="status" aria-live="polite">
-  <div class="towers" id="towers"></div>
   <div class="boot-center">
-    <div class="boot-mark">PlayStation<b>2</b></div>
-    <div class="boot-line">Loading PlayStation 2...</div>
+    <div class="boot-mark">PSP</div>
+    <div class="boot-line">Loading PlayStation Portable...</div>
     <div class="boot-game" id="bootGame"></div>
     <div class="boot-bar"><i></i></div>
   </div>
 </div>
 
-<!-- ═════════════ BOTONES FLOTANTES ═════════════ -->
 <div class="fabs">
   <button class="fab fab-play" id="fabExit" type="button" data-tip="Volver a la mesa" aria-label="Volver a la mesa">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5"/><path d="M15 8l4 4-4 4M9 12h10"/></svg>
   </button>
-  <button class="fab fab-play" id="fabRestart" type="button" data-tip="Reiniciar consola" aria-label="Reiniciar consola">
+  <button class="fab fab-play" id="fabRestart" type="button" data-tip="Recargar Play!" aria-label="Recargar Play!">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></svg>
   </button>
   <button class="fab" id="fabFs" type="button" data-tip="Pantalla completa" aria-label="Pantalla completa">
@@ -391,33 +306,31 @@ button{font:inherit;color:inherit;cursor:pointer}
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<input type="file" id="filePicker" accept=".iso,.bin,.chd,.cso,.cue,.isz,.elf" hidden>
+<input type="file" id="filePicker" accept=".iso,.cso,.pbp" hidden>
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
    CONFIGURACIÓN — edita aquí
    ═══════════════════════════════════════════════════════════════════════ */
 
-// Juegos de la estantería. Reemplaza portada e isoUrl por enlaces reales.
-// Si la portada no carga, se genera una carátula de respaldo automáticamente.
+// Juegos de PS2 en la estantería.
+// isoUrl (opcional): enlace DIRECTO al archivo, solo se usa para el botón "Descargar ISO".
+// Un enlace de MediaFire/Drive que abre una página NO es un enlace directo.
 const juegos = [
-  { id: 'juego1', titulo: 'Silent Hill Origins', portada: 'https://imgs.search.brave.com/9V8y0Ewcazj5Cg4v1HZ2k7yNv_gZwWP8Oc9_mp0ALqc/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly93d3cu/Z2FtZXNneC5uZXQv/cGJwcmJhdnIvc2ls/ZW50LWhpbGwtb3Jp/Z2lucy5qcGc', isoUrl: 'https://www.mediafire.com/file/nzauabrrad8vf5m/Silent+Hill+Origins.iso' },
-  { id: 'juego2', titulo: 'Juego 2', portada: 'url_portada.jpg', isoUrl: 'https://archive.org/.../juego2.iso' },
-  { id: 'juego3', titulo: 'Juego 3', portada: 'url_portada.jpg', isoUrl: 'https://archive.org/.../juego3.iso' },
-  { id: 'juego4', titulo: 'Juego 4', portada: 'url_portada.jpg', isoUrl: 'https://archive.org/.../juego4.iso' }
+  // isoUrl vacío: se usa la ISO que elijas desde tu equipo (recomendado, no se sube a ningún sitio).
+  // Si alguna vez tienes un enlace DIRECTO con CORS abierto, ponlo aquí.
+  { id: 'juego1', titulo: 'Silent Hill Origins', portada: 'https://imgs.search.brave.com/9V8y0Ewcazj5Cg4v1HZ2k7yNv_gZwWP8Oc9_mp0ALqc/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly93d3cu/Z2FtZXNneC5uZXQv/cGJwcmJhdnIvc2ls/ZW50LWhpbGwtb3Jp/Z2lucy5qcGc', isoUrl: '' }
 ];
 
-// Motor. OJO: el CDN oficial de EmulatorJS no publica un core "play" (PS2).
-// Si dispones de una build de EmulatorJS que lo incluya, apunta dataPath a ella.
+// Núcleo PSP de EmulatorJS (ppsspp). Requiere hilos => COOP/COEP => coi-serviceworker.js + HTTPS.
 const EMULADOR = {
-  core: 'play',
+  core: 'psp',
   dataPath: 'https://cdn.emulatorjs.org/stable/data/',   // debe terminar en "/"
   idioma: 'es-ES',
-  color: '#3d7bff',
-  respaldoUrl: 'https://playjs.purei.org/'                // Play! para navegador (oficial)
+  color: '#3d7bff'
 };
 
-const EXT_OK = ['iso', 'bin', 'chd', 'cso', 'cue', 'isz', 'elf'];
+const EXT_OK = ['iso', 'cso', 'pbp'];
 const POR_FILA = 3;
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -433,21 +346,22 @@ const wait = ms => new Promise(r => setTimeout(r, RM ? ms * .4 : ms));
 
 const scene = $('#scene'), rows = $('#shelfRows'), plate = $('#plate'), disc = $('#disc'), discTitle = $('#discTitle');
 const bootEl = $('#boot'), bootGame = $('#bootGame'), curtain = $('#curtain');
-const stage = $('#playerStage'), errBox = $('#playerError'), toastEl = $('#toast'), picker = $('#filePicker');
+const stage = $('#playerStage'), toastEl = $('#toast'), picker = $('#filePicker');
 
-let state = 'idle';          // idle | loading | running | error | exiting
-let session = 0;             // se incrementa para cancelar secuencias en curso
-let current = null;          // juego insertado
-let custom = null;           // { file, url, item }
-let emu = null, watchdog = 0, hintShown = false;
+let state = 'idle';          // idle | loading | running | exiting
+let session = 0;
+let current = null;
+let custom = null;           // { file, item }
+let frame = null, hintShown = false;
 
 const setState = s => { state = s; scene.classList.toggle('is-busy', s !== 'idle'); };
 const isOpen = () => scene.classList.contains('is-open');
 
-/* ── Utilidades ───────────────────────────────────────────────────────── */
+/* ── Utilidades ─────────────────────────────────────────────────────── */
 const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 const hueOf = id => hash(id) % 360;
 const fmtSize = n => n >= 1e9 ? (n / 1e9).toFixed(1).replace('.', ',') + ' GB' : Math.max(1, Math.round(n / 1e6)) + ' MB';
+const isDirect = u => /^https?:\/\//.test(u || '') && !/mediafire\.com|drive\.google\.com|dropbox\.com\/s\//.test(u);
 
 let toastT = 0;
 function toast(msg, ms = 3800) {
@@ -455,7 +369,6 @@ function toast(msg, ms = 3800) {
   clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('is-on'), ms);
 }
 
-// Carátula generada (SVG) cuando la portada no existe o no carga
 function coverArt(id) {
   const h = hueOf(id), h2 = (h + 48) % 360, k = hash(id + 'k') % 3;
   let s;
@@ -466,7 +379,7 @@ function coverArt(id) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
-/* ── Sonido sintetizado (WebAudio, sin archivos externos) ─────────────── */
+/* ── Sonido sintetizado ─────────────────────────────────────────────── */
 const sfx = (() => {
   let ctx = null, muted = false;
   const get = () => {
@@ -474,17 +387,15 @@ const sfx = (() => {
     try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === 'suspended') ctx.resume(); } catch (_) { return null; }
     return ctx;
   };
-  const tone = (type, f0, f1, t, dur, peak, dest) => {
+  const tone = (type, f0, f1, t, dur, peak) => {
     const c = ctx, o = c.createOscillator(), g = c.createGain();
     o.type = type; o.frequency.setValueAtTime(f0, t);
     if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
     g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + .012); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-    o.connect(g); g.connect(dest || c.destination); o.start(t); o.stop(t + dur + .05);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + .05);
   };
   return {
-    unlock() { get(); },
-    setMuted(v) { muted = v; },
-    isMuted: () => muted,
+    unlock() { get(); }, setMuted(v) { muted = v; }, isMuted: () => muted,
     pick()  { const c = get(); if (c) tone('triangle', 520, 780, c.currentTime, .12, .05); },
     click() { const c = get(); if (c) tone('square', 180, 70, c.currentTime, .09, .05); },
     whirr(sec = 1.2) {
@@ -509,45 +420,35 @@ const sfx = (() => {
   };
 })();
 
-/* ── Estantería ───────────────────────────────────────────────────────── */
+/* ── Estantería ─────────────────────────────────────────────────────── */
 const slotOf = id => rows.querySelector('.nook[data-id="' + CSS.escape(id) + '"]');
+
+let iso = null;   // { file, url } ISO elegida por el usuario
+const hasSource = g => !!(iso || isDirect(g.isoUrl));
+const srcOf = g => iso ? iso.url : g.isoUrl;
+function needIso() { toast('Primero elige tu ISO de Silent Hill Origins (versión PSP).'); picker.click(); }
 
 function buildCase(game) {
   const nook = el('div', 'nook'); nook.dataset.id = game.id;
   const c = el('div', 'case'); c.tabIndex = 0; c.setAttribute('role', 'button');
-  c.setAttribute('aria-label', `${game.titulo}. Arrástralo hasta la bandeja de la PS2 o pulsa Enter para insertarlo.`);
-  c.innerHTML = '<div class="case-face"><div class="case-band"><span aria-hidden="true">PlayStation<b>2</b></span><i></i></div><img class="case-art" alt="" draggable="false" decoding="async"><div class="case-title"></div></div>';
+  c.setAttribute('aria-label', `${game.titulo}. Arrástralo hasta la bandeja de la consola o pulsa Enter para insertarlo.`);
+  c.innerHTML = '<div class="case-face"><div class="case-band"><span aria-hidden="true">PSP</span><i></i></div><img class="case-art" alt="" draggable="false" decoding="async"><div class="case-title"></div></div>';
   const img = $('img', c); img.referrerPolicy = 'no-referrer';
   img.addEventListener('error', () => { if (!img.dataset.fb) { img.dataset.fb = '1'; img.src = coverArt(game.id); } });
   img.src = game.portada || coverArt(game.id);
   $('.case-title', c).textContent = game.titulo;
   c.title = game.titulo;
   nook.appendChild(c);
-  attachDrag(c, nook, () => game, () => {
+  attachDrag(c, nook, () => hasSource(game) ? game : null, () => {
+    if (!hasSource(game)) { needIso(); return; }
     if (!hintShown) { hintShown = true; toast('Arrastra la caja hasta la bandeja de la consola.'); }
   });
   c.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertGame(game, null); } });
   return nook;
 }
 
-function buildSleeve() {
-  const nook = el('div', 'nook'); nook.dataset.id = 'custom';
-  const s = el('div', 'sleeve'); s.tabIndex = 0; s.setAttribute('role', 'button');
-  s.setAttribute('aria-label', 'ISO propia: elegir un archivo de tu equipo');
-  s.innerHTML = '<div class="sleeve-window"><div class="sleeve-disc"></div></div><div class="sleeve-name">ISO propia</div><div class="sleeve-sub">Elegir archivo</div>';
-  const ch = el('button', 'sleeve-change', 'Cambiar'); ch.type = 'button'; ch.hidden = true;
-  ch.addEventListener('click', () => picker.click());
-  nook.append(s, ch);
-  attachDrag(s, nook, () => custom && custom.item, () => { if (!custom) picker.click(); });
-  s.addEventListener('keydown', e => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    e.preventDefault(); custom ? insertGame(custom.item, null) : picker.click();
-  });
-  return nook;
-}
-
 function buildShelf() {
-  const items = juegos.map(g => buildCase(g)); items.push(buildSleeve());
+  const items = juegos.map(g => buildCase(g));
   rows.innerHTML = '';
   for (let i = 0; i < items.length; i += POR_FILA) {
     const row = el('div', 'shelf-row'); items.slice(i, i + POR_FILA).forEach(n => row.appendChild(n));
@@ -555,27 +456,23 @@ function buildShelf() {
   }
 }
 
-/* ── ISO desde el PC ──────────────────────────────────────────────────── */
-function setCustomFile(f) {
+/* ── ISO desde tu equipo ──────────────────────────────────────────────── */
+function setIsoFile(f) {
   const ext = (f.name.split('.').pop() || '').toLowerCase();
   if (!EXT_OK.includes(ext)) { toast('Formato .' + ext + ' no compatible. Usa ' + EXT_OK.map(x => '.' + x).join(', ') + '.'); return false; }
-  if (custom) URL.revokeObjectURL(custom.url);
-  const url = URL.createObjectURL(f);
-  custom = { file: f, url, item: { id: 'custom', titulo: f.name.replace(/\.[^.]+$/, ''), isoUrl: url, gameName: f.name, custom: true } };
-  const s = $('.sleeve'), nook = slotOf('custom');
-  s.classList.add('has-file');
-  $('.sleeve-name', s).textContent = custom.item.titulo;
-  $('.sleeve-sub', s).textContent = fmtSize(f.size);
-  $('.sleeve-change', nook).hidden = false;
-  s.setAttribute('aria-label', custom.item.titulo + ', ISO propia. Arrástrala hasta la bandeja o pulsa Enter para insertarla.');
+  if (iso) URL.revokeObjectURL(iso.url);
+  iso = { file: f, url: URL.createObjectURL(f) };
+  $('#isoName').textContent = f.name + ' · ' + fmtSize(f.size);
+  $('#isoBtn').textContent = 'Cambiar ISO';
   return true;
 }
 picker.addEventListener('change', () => {
   const f = picker.files && picker.files[0]; picker.value = '';
-  if (f && setCustomFile(f)) toast('ISO lista. Arrastra el sobre hasta la bandeja.');
+  if (f && setIsoFile(f)) toast('ISO lista. Arrastra la caja hasta la bandeja.');
 });
+$('#isoBtn').addEventListener('click', () => picker.click());
 
-/* ── Drag & drop (Pointer Events: ratón, táctil y lápiz) ──────────────── */
+/* ── Drag & drop (Pointer Events) ───────────────────────────────────── */
 function targetRect() {
   const r = plate.getBoundingClientRect(), pad = Math.max(28, r.width * .18);
   return { l: r.left - pad, r: r.right + pad, t: r.top - pad, b: r.bottom + pad };
@@ -666,12 +563,12 @@ window.addEventListener('drop', e => {
   e.preventDefault(); dragDepth = 0; scene.classList.remove('is-armed', 'is-target');
   if (state !== 'idle') return;
   const f = e.dataTransfer.files && e.dataTransfer.files[0];
-  if (!f || !setCustomFile(f)) return;
-  if (isOpen() && inTarget(e.clientX, e.clientY)) insertGame(custom.item, null);
-  else toast('ISO lista. Arrastra el sobre hasta la bandeja.');
+  if (!f || !setIsoFile(f)) return;
+  if (isOpen() && inTarget(e.clientX, e.clientY)) insertGame(juegos[0], null);
+  else toast('ISO lista. Arrastra la caja hasta la bandeja.');
 });
 
-/* ── Secuencia: insertar → cerrar tapa → arrancar ─────────────────────── */
+/* ── Secuencia: insertar → cerrar tapa → arrancar ───────────────────── */
 function paintDisc(game) {
   disc.style.setProperty('--h', game.custom ? 215 : hueOf(game.id));
   discTitle.textContent = game.titulo;
@@ -680,6 +577,7 @@ function paintDisc(game) {
 
 async function insertGame(game, from) {
   if (state !== 'idle' || !isOpen()) return;
+  if (!hasSource(game)) { needIso(); return; }
   setState('loading'); current = game;
   const sid = ++session, nook = (from && from.nook) || slotOf(game.id);
   sfx.unlock();
@@ -687,34 +585,34 @@ async function insertGame(game, from) {
   paintDisc(game);
   if (from) { flyToTray(from); await wait(300); } else await wait(80);
   if (sid !== session) return;
-  disc.classList.add('is-in'); sfx.click();                    // el disco cae en la bandeja
+  disc.classList.add('is-in'); sfx.click();
   await wait(1000); if (sid !== session) return;
-  scene.classList.remove('is-open'); sfx.whirr(1.3);           // la tapa se cierra
+  scene.classList.remove('is-open'); sfx.whirr(1.3);
   await wait(1500); if (sid !== session) return;
-  scene.classList.add('is-on');                                // LED verde + brillo azul
+  scene.classList.add('is-on');
   await wait(500); if (sid !== session) return;
-  runBoot(game, sid, true);
+  runBoot(game, sid, 3400);
 }
 
-async function runBoot(game, sid, long) {
-  const ms = long ? 4300 : 2100;
+async function runBoot(game, sid, ms) {
   bootGame.textContent = game.titulo;
   bootEl.style.setProperty('--boot-ms', ms + 'ms');
   bootEl.classList.remove('is-visible'); void bootEl.offsetWidth; bootEl.classList.add('is-visible');
   sfx.chime();
   await wait(750); if (sid !== session) return;
-  document.body.classList.add('is-playing');                   // se oculta la mesa
-  mountEmulator(game);
+  document.body.classList.add('is-playing');
+  mountPlayer(game);
   await wait(ms - 750); if (sid !== session) return;
   bootEl.classList.remove('is-visible');
 }
 
-/* ── Emulador (EmulatorJS dentro de un iframe desechable) ─────────────── */
+/* ── Emulador (EmulatorJS, core PSP, dentro de un iframe desechable) ──── */
+let watchdog = 0;
+
 function emuDoc(game) {
   const cfg = {
-    core: EMULADOR.core, url: game.isoUrl, name: game.gameName || game.titulo,
-    path: EMULADOR.dataPath, lang: EMULADOR.idioma, color: EMULADOR.color,
-    threads: window.crossOriginIsolated === true
+    core: EMULADOR.core, url: srcOf(game), name: (iso && iso.file.name) || game.titulo,
+    path: EMULADOR.dataPath, lang: EMULADOR.idioma, color: EMULADOR.color
   };
   const json = JSON.stringify(cfg).replace(/</g, '\\u003c');
   return '<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#game{width:100%;height:100%}</style></head><body><div id="game"></div>' +
@@ -722,7 +620,7 @@ function emuDoc(game) {
   'var post=function(t,m){try{parent.postMessage({ps2table:true,type:t,message:m||""},"*")}catch(e){}};' +
   'window.EJS_player="#game";window.EJS_core=C.core;window.EJS_gameUrl=C.url;window.EJS_gameName=C.name;' +
   'window.EJS_pathtodata=C.path;window.EJS_language=C.lang;window.EJS_color=C.color;window.EJS_backgroundColor="#000000";' +
-  'window.EJS_threads=C.threads;window.EJS_startOnLoaded=true;' +
+  'window.EJS_threads=true;window.EJS_startOnLoaded=true;' +
   'window.EJS_onGameStart=function(){post("start")};' +
   'window.addEventListener("error",function(e){var t=e.target;if(t&&t.tagName==="SCRIPT"&&/loader\\.js|emulator/.test(t.src||""))post("error","No se pudo cargar el motor desde "+t.src)},true);' +
   'var iv=setInterval(function(){try{var g=document.getElementById("game"),bad=g&&g.querySelector(".ejs_error_text");' +
@@ -730,84 +628,67 @@ function emuDoc(game) {
   '})();<\/script><script src="' + EMULADOR.dataPath + 'loader.js"><\/script></body></html>';
 }
 
-function mountEmulator(game) {
-  unmountEmulator(); errBox.classList.remove('is-visible');
-  const url = String(game.isoUrl || '');
-  if (!/^(https?:|blob:)/.test(url) || url.includes('...')) {
-    showEmuError('La isoUrl de «' + game.titulo + '» todavía es una plantilla.', [
-      'Abre <code>index.html</code> y reemplaza <code>isoUrl</code> en el arreglo <code>juegos</code> por un enlace directo a tu ISO.',
-      'Mientras tanto, puedes cargar un archivo de tu PC con el sobre «ISO propia».'
-    ]);
-    return;
+function showEmuError(msg) {
+  clearTimeout(watchdog);
+  $('#playerInfo').textContent = msg;
+  toast(msg, 10000);
+}
+
+function mountPlayer(game) {
+  unmountPlayer();
+  const info = $('#playerInfo');
+  if (window.crossOriginIsolated !== true) {
+    showEmuError('Sin aislamiento COOP/COEP (obligatorio para PSP): sube coi-serviceworker.js junto a index.html, abre el sitio por HTTPS y recarga la página.');
+    setState('running'); return;
   }
   const f = document.createElement('iframe');
-  f.title = 'Emulador PlayStation 2';
+  f.title = 'Emulador PSP';
   f.setAttribute('allow', 'autoplay; fullscreen; gamepad');
   f.setAttribute('allowfullscreen', '');
   f.srcdoc = emuDoc(game);
-  stage.appendChild(f);
-  emu = { frame: f, started: false };
-  setState('running');
+  stage.appendChild(f); frame = f;
+  info.textContent = 'Cargando ' + game.titulo + '… (la primera vez descarga el motor)';
   watchdog = setTimeout(() => {
-    if (emu && !emu.started && state === 'running') toast('Está tardando en arrancar. Las ISO grandes pueden tardar varios minutos en descargarse.', 7000);
-  }, 60000);
-}
-
-function unmountEmulator() {
-  clearTimeout(watchdog);
-  if (emu && emu.frame) emu.frame.remove();
-  emu = null; stage.innerHTML = '';
-}
-
-function showEmuError(msg, tips) {
-  clearTimeout(watchdog);
-  bootEl.classList.remove('is-visible');
-  document.body.classList.add('is-playing');
-  setState('error');
-  $('#errMsg').textContent = msg || 'El emulador no respondió.';
-  $('#errTips').innerHTML = (tips || [
-    'EmulatorJS no publica un core de PS2 en su CDN oficial. Para usar <code>play</code>, apunta <code>EMULADOR.dataPath</code> a una build que lo incluya.',
-    'Comprueba que el enlace de la ISO sea directo al archivo y que su servidor permita CORS.',
-    'Si el indicador de aislamiento COOP/COEP aparece inactivo, sube <code>coi-serviceworker.js</code> junto a <code>index.html</code>.'
-  ]).map(t => '<li>' + t + '</li>').join('');
-  $('#errFallback').href = EMULADOR.respaldoUrl;
-  errBox.classList.add('is-visible');
+    if (frame === f && state === 'running') info.textContent = 'Está tardando. Las ISO grandes y el motor PSP pueden tardar un par de minutos.';
+  }, 45000);
+  setState('running');
 }
 
 window.addEventListener('message', e => {
   const d = e.data;
-  if (!d || d.ps2table !== true || !emu || e.source !== emu.frame.contentWindow) return;
-  if (d.type === 'start') { emu.started = true; clearTimeout(watchdog); }
-  else if (d.type === 'error' && !emu.started) showEmuError(d.message);
+  if (!d || d.ps2table !== true || !frame || e.source !== frame.contentWindow) return;
+  if (d.type === 'start') { clearTimeout(watchdog); $('#playerInfo').textContent = (current ? current.titulo : '') + ' · en marcha'; }
+  else if (d.type === 'error') showEmuError('Error del emulador' + (d.message ? ': ' + d.message : '. Revisa la consola del navegador (F12).'));
 });
 
-/* ── Controles: reiniciar y salir ─────────────────────────────────────── */
-function restart() {
-  if (!current || (state !== 'running' && state !== 'error')) return;
-  errBox.classList.remove('is-visible');
-  runBoot(current, ++session, false);
+function unmountPlayer() { clearTimeout(watchdog); if (frame) frame.remove(); frame = null; stage.innerHTML = ''; }
+
+/* ── Controles ──────────────────────────────────────────────────────── */
+function reloadPlayer() {
+  if (state !== 'running' || !frame) return;
+  frame.srcdoc = frame.srcdoc;
 }
 
 async function exitToTable() {
-  if (state !== 'running' && state !== 'error') return;
+  if (state !== 'running') return;
   const sid = ++session, g = current; setState('exiting');
   curtain.classList.add('is-on'); await wait(380); if (sid !== session) return;
   bootEl.style.transition = 'none'; bootEl.classList.remove('is-visible'); void bootEl.offsetWidth; bootEl.style.transition = '';
-  unmountEmulator(); errBox.classList.remove('is-visible');
+  unmountPlayer();
   document.body.classList.remove('is-playing');
   scene.classList.remove('is-on');
   curtain.classList.remove('is-on');
   await wait(700); if (sid !== session) return;
-  scene.classList.add('is-open'); sfx.whirr(1.2);              // la bandeja vuelve a salir
+  scene.classList.add('is-open'); sfx.whirr(1.2);
   await wait(1400); if (sid !== session) return;
   disc.classList.remove('is-in'); disc.classList.add('is-out');
   await wait(550); if (sid !== session) return;
-  slotOf(g.id).classList.remove('is-empty');                   // el disco vuelve a su caja
+  slotOf(g.id).classList.remove('is-empty');
   disc.classList.remove('is-out');
   current = null; setState('idle');
 }
 
-/* ── Pantalla completa ────────────────────────────────────────────────── */
+/* ── Pantalla completa ──────────────────────────────────────────────── */
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
 function toggleFs() {
   const de = document.documentElement;
@@ -826,10 +707,9 @@ document.addEventListener('fullscreenchange', syncFs);
 document.addEventListener('webkitfullscreenchange', syncFs);
 
 $('#fabFs').addEventListener('click', toggleFs);
-$('#fabRestart').addEventListener('click', restart);
+$('#fabRestart').addEventListener('click', reloadPlayer);
 $('#fabExit').addEventListener('click', exitToTable);
-$('#errBack').addEventListener('click', exitToTable);
-$('#errRetry').addEventListener('click', restart);
+$('#backBtn').addEventListener('click', exitToTable);
 
 const soundBtn = $('#soundBtn');
 soundBtn.addEventListener('click', () => {
@@ -838,24 +718,7 @@ soundBtn.addEventListener('click', () => {
   soundBtn.setAttribute('aria-pressed', String(!m));
 });
 
-/* ── Arranque de la página ────────────────────────────────────────────── */
-function buildTowers() {
-  let h = '';
-  for (let i = 0; i < 26; i++) {
-    h += '<i style="--x:' + (i / 26 * 100 + (Math.random() * 3 - 1.5)).toFixed(2) + '%;--w:' + (1.2 + Math.random() * 2.6).toFixed(2) + 'vw;--h:' +
-         (28 + Math.random() * 62).toFixed(1) + '%;--d:' + (-Math.random() * 6).toFixed(2) + 's;--t:' + (3.6 + Math.random() * 4).toFixed(2) +
-         's;--o:' + (.25 + Math.random() * .55).toFixed(2) + '"></i>';
-  }
-  $('#towers').innerHTML = h;
-}
-
-(function init() {
-  buildShelf(); buildTowers(); syncFs();
-  const iso = window.crossOriginIsolated === true, s = $('#isoStatus');
-  s.dataset.ok = String(iso);
-  s.textContent = iso ? 'Aislamiento COOP/COEP activo' : 'Sin aislamiento COOP/COEP';
-  s.title = iso ? 'SharedArrayBuffer disponible.' : 'Sube coi-serviceworker.js junto a index.html y recarga (requiere HTTPS o localhost).';
-})();
+buildShelf(); syncFs();
 })();
 </script>
 </body>
