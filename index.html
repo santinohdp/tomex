@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a1020">
+<meta name="description" content="Mesa de juegos con una PlayStation 2: arrastra un disco a la bandeja y juega en el navegador.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a1020'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%233d7bff' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%238db0ff'/%3E%3C/svg%3E">
+<title>Mesa de juegos · PlayStation 2</title>
+
+<!--
+  ─────────────────────────────────────────────────────────────────────────
+  COOP / COEP EN GITHUB PAGES  (necesario para SharedArrayBuffer)
+  ─────────────────────────────────────────────────────────────────────────
+  Un service worker SOLO puede registrarse desde tu propio origen, así que
+  coi-serviceworker NO funciona cargado desde un CDN. Además, la URL
+  https://cdn.jsdelivr.net/gh/gzguidoti/coi-serviceworker/... devuelve 404
+  (el repositorio real es gzuidhof/coi-serviceworker).
+
+  Solución: sube "coi-serviceworker.js" (incluido junto a este archivo, es la
+  versión oficial MIT) a la MISMA carpeta que index.html.
+  Debe ser el primer <script> de la página.
+-->
+<script src="coi-serviceworker.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Hanken+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --wall-a:#0a1020; --wall-b:#111b34;
+  --shelf-wood:#3a2418;
+  --blue:#3d7bff; --blue-soft:#8db0ff;
+  --amber:#ffb454;
+  --ink:#e9edf6; --ink-dim:#97a3bd;
+  --font-display:'Big Shoulders Display','Arial Narrow','Roboto Condensed',Impact,sans-serif;
+  --font-ui:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --cw:clamp(66px,6.3vw,98px);              /* ancho de cada caja de juego */
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:#050813;color:var(--ink);font-family:var(--font-ui);overflow:hidden;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+
+/* ═════════════ ESCENA ═════════════ */
+.scene{
+  position:relative;height:100vh;height:100dvh;overflow:hidden;isolation:isolate;
+  font-size:clamp(6px,min(1.2vw,1.85vh),14.5px);   /* 1em = unidad de la consola */
+  user-select:none;-webkit-user-select:none;
+}
+.is-playing .scene{visibility:hidden}
+.wall{position:absolute;inset:0;z-index:-3;background:
+  radial-gradient(36% 32% at 80% 12%,rgba(255,180,84,.20),transparent 70%),
+  radial-gradient(44% 36% at 46% 60%,rgba(61,123,255,.16),transparent 72%),
+  linear-gradient(180deg,var(--wall-a),var(--wall-b) 55%,#0c142a)}
+.wall::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,.018) 0 1px,transparent 1px 96px)}
+.desk{position:absolute;left:0;right:0;top:50%;bottom:0;z-index:-2;background:
+  linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,0) 26%),
+  repeating-linear-gradient(90deg,rgba(255,255,255,.018) 0 2px,transparent 2px 11px),
+  repeating-linear-gradient(90deg,rgba(0,0,0,.22) 0 1px,transparent 1px 37px),
+  linear-gradient(180deg,#2d1b12,#1b1009);
+  box-shadow:inset 0 1px 0 rgba(255,180,84,.22)}
+.desk-glow{position:absolute;left:50%;top:62%;width:72em;height:28em;margin-left:-36em;z-index:-1;
+  background:radial-gradient(closest-side,rgba(61,123,255,.30),transparent);opacity:.25;transition:opacity 1.4s ease;pointer-events:none}
+.is-on .desk-glow{opacity:.9}
+
+/* Texto de bienvenida */
+.intro{position:absolute;z-index:3;left:clamp(16px,3.2vw,56px);top:clamp(16px,6vh,60px);width:min(26rem,30vw)}
+.intro h1{margin:0 0 .7rem;font:800 clamp(2.2rem,4.6vw,4.2rem)/.9 var(--font-display);letter-spacing:.01em;color:#f3f6fc}
+.intro p{margin:0 0 .6rem;font-size:.95rem;line-height:1.55;color:var(--ink-dim);max-width:34ch}
+.intro-meta{display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;align-items:center;margin-top:1rem;font-size:.8rem}
+.status{display:inline-flex;align-items:center;gap:.45rem;color:var(--ink-dim)}
+.status::before{content:"";width:.5rem;height:.5rem;border-radius:50%;background:#e0623a;box-shadow:0 0 .6rem #e0623a}
+.status[data-ok="true"]::before{background:#3ddc84;box-shadow:0 0 .6rem #3ddc84}
+.linklike{background:none;border:0;padding:0;color:var(--blue-soft);text-decoration:underline;text-underline-offset:3px;font-size:.8rem}
+
+/* ═════════════ ESTANTERÍA ═════════════ */
+.shelf{position:absolute;z-index:3;right:clamp(12px,2.6vw,44px);top:clamp(22px,6.5vh,64px);
+  width:calc(var(--cw)*3 + 92px);padding:12px 14px 6px;border-radius:6px 6px 2px 2px;
+  max-height:calc(50vh - clamp(22px,6.5vh,64px) - 8px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;
+  background:
+    linear-gradient(90deg,rgba(0,0,0,.35),transparent 8%,transparent 92%,rgba(0,0,0,.35)),
+    linear-gradient(180deg,#160d08,#22140c);
+  box-shadow:0 0 0 5px var(--shelf-wood),0 0 0 6px rgba(255,180,84,.14),0 30px 60px -20px rgba(0,0,0,.85),inset 0 0 40px rgba(0,0,0,.6)}
+.shelf-row{display:flex;justify-content:flex-start;align-items:flex-end;gap:14px;padding:16px 6px 0;min-height:calc(var(--cw)*1.41 + 24px)}
+.plank{height:12px;margin:0 -14px;background:linear-gradient(180deg,#5a3a26,#3a2418 60%,#24150d);box-shadow:0 6px 10px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,200,140,.25)}
+.lamp{position:absolute;z-index:3;right:calc(clamp(12px,2.6vw,44px) + (var(--cw)*3 + 92px)/2 - 6rem);top:calc(clamp(22px,6.5vh,64px) - 22px);width:12rem;height:6px;border-radius:3px;
+  background:linear-gradient(#ffe2b0,var(--amber));box-shadow:0 0 30px 10px rgba(255,180,84,.35),0 0 90px 36px rgba(255,180,84,.14)}
+
+.nook{position:relative;flex:none;width:var(--cw);height:calc(var(--cw)*1.41)}
+.nook::before{content:"";position:absolute;inset:0;border:1px dashed rgba(255,255,255,.16);border-radius:3px;opacity:0;transition:opacity .3s}
+.nook.is-empty::before{opacity:1}
+.nook.is-empty .case,.nook.is-empty .sleeve,.nook.is-empty .sleeve-change{visibility:hidden}
+.nook.is-dragging .case,.nook.is-dragging .sleeve{opacity:.22}
+.case,.sleeve{position:absolute;inset:0;touch-action:none}
+.case{cursor:grab;border-radius:3px;transform-origin:50% 100%;transition:transform .22s ease}
+.case:hover,.case:focus-visible{transform:translateY(-8px) rotate(-1.2deg)}
+.is-busy .case,.is-busy .sleeve,.is-busy .sleeve-change{cursor:default;pointer-events:none}
+.is-armed,.is-armed *{cursor:grabbing!important}
+
+.case-face{position:absolute;inset:0;border-radius:3px;overflow:hidden;display:flex;flex-direction:column;background:#0a0b0f;
+  box-shadow:0 0 0 1px rgba(255,255,255,.09),3px 6px 16px rgba(0,0,0,.65)}
+.case-face::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6%;background:linear-gradient(90deg,rgba(255,255,255,.16),rgba(0,0,0,.35));z-index:2}
+.case-face::after{content:"";position:absolute;inset:0;background:linear-gradient(118deg,rgba(255,255,255,.2),transparent 32%,transparent 70%,rgba(255,255,255,.06));z-index:3;pointer-events:none}
+.case-band{flex:none;height:12.5%;display:flex;align-items:center;justify-content:space-between;padding:0 9% 0 12%;background:#07080b;border-bottom:1px solid rgba(255,255,255,.06);overflow:hidden}
+.case-band span{font:600 clamp(.36rem,.55vw,.46rem)/1 var(--font-ui);letter-spacing:.06em;color:#c5d0ea;white-space:nowrap}
+.case-band span b{margin-left:.15em;color:var(--blue-soft)}
+.case-band i{flex:none;width:.45rem;height:.45rem;border-radius:50%;background:var(--blue);box-shadow:0 0 .4rem var(--blue)}
+.case-art{flex:1;min-height:0;width:100%;object-fit:cover;display:block;-webkit-user-drag:none;user-select:none}
+.case-title{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:26% 9% 7% 12%;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);
+  font:800 clamp(.85rem,1.35vw,1.1rem)/1.02 var(--font-display);letter-spacing:.015em;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+
+/* Sobre para ISO propia */
+.sleeve{cursor:pointer;border-radius:3px;display:flex;flex-direction:column;align-items:center;gap:5%;padding:9% 8% 24%;color:#2a1a0e;
+  background:linear-gradient(135deg,rgba(255,255,255,.16),transparent 42%),repeating-linear-gradient(90deg,rgba(0,0,0,.05) 0 2px,transparent 2px 5px),#b48e62;
+  box-shadow:3px 6px 16px rgba(0,0,0,.65),inset 0 0 0 1px rgba(255,255,255,.14);transition:transform .22s ease}
+.sleeve:hover,.sleeve:focus-visible{transform:translateY(-8px) rotate(1.2deg)}
+.sleeve-window{width:78%;aspect-ratio:1;border-radius:50%;background:#1a100a;display:grid;place-items:center;box-shadow:inset 0 2px 6px rgba(0,0,0,.7)}
+.sleeve-disc{width:88%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle closest-side,#1a100a 0 10%,transparent 11%),conic-gradient(from 20deg,#f1f3f8,#c5cee0,#fafbfd,#d9d3ec,#f1f3f8)}
+.sleeve.has-file .sleeve-disc{background:radial-gradient(circle closest-side,#1a100a 0 10%,transparent 11%),radial-gradient(circle closest-side,hsl(215,65%,34%) 0 92%,#cfd6e6 93%)}
+.sleeve-name{font:800 clamp(.85rem,1.3vw,1.05rem)/1 var(--font-display);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sleeve-sub{font-size:.62rem;opacity:.78;text-align:center;line-height:1.1}
+.sleeve-change{position:absolute;left:50%;bottom:5px;transform:translateX(-50%);z-index:2;border:0;border-radius:99px;padding:2px 9px;
+  background:rgba(30,18,8,.82);color:#f3dcbc;font-size:.62rem}
+.sleeve-change[hidden]{display:none}
+
+/* ═════════════ CONSOLA PS2 (CSS 3D) ═════════════ */
+.ps2-stage{position:absolute;left:50%;bottom:4%;width:52em;height:38em;margin-left:-26em;z-index:2;
+  perspective:95em;perspective-origin:50% 22%;pointer-events:none}
+.ps2-shadow{position:absolute;left:50%;top:40%;width:0;height:0}
+.ps2-shadow::before{content:"";position:absolute;left:-29em;top:-5em;width:58em;height:20em;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(0,0,0,.7),rgba(0,0,0,.35) 60%,transparent);filter:blur(.5em)}
+.ps2-shadow::after{content:"";position:absolute;left:-26em;top:6.5em;width:22em;height:9em;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(0,0,0,.5),transparent);opacity:0;transition:opacity 1s ease}
+.is-open .ps2-shadow::after{opacity:1}
+.ps2{position:absolute;left:50%;top:40%;width:44em;height:11.4em;margin:-5.7em 0 0 -22em;
+  transform-style:preserve-3d;transform:rotateX(-30deg) rotateY(-16deg)}
+.face{position:absolute}
+.f-front{left:0;top:0;width:44em;height:11.4em;transform:translateZ(13.25em);border-radius:.3em;
+  background:linear-gradient(180deg,#2c2e39 0,#191a21 28%,#121319 100%);
+  box-shadow:inset 0 .14em 0 rgba(255,255,255,.14),inset 0 -.25em .7em rgba(0,0,0,.65)}
+.f-top{left:0;top:-7.55em;width:44em;height:26.5em;transform:rotateX(90deg) translateZ(5.7em);border-radius:.3em;
+  background:linear-gradient(165deg,#343745 0,#1d1e26 34%,#15161c 100%);
+  box-shadow:inset 0 0 2.4em rgba(0,0,0,.55),inset 0 0 0 .1em rgba(255,255,255,.05);transition:box-shadow 1.2s}
+.is-on .f-top{box-shadow:inset 0 0 2.4em rgba(0,0,0,.55),inset 0 0 0 .1em rgba(255,255,255,.05),inset 0 -3em 4em -2em rgba(61,123,255,.28)}
+.f-right{left:8.75em;top:0;width:26.5em;height:11.4em;transform:rotateY(90deg) translateZ(22em);border-radius:.3em;
+  background:repeating-linear-gradient(90deg,rgba(0,0,0,.35) 0 .3em,transparent .3em 1.1em),linear-gradient(90deg,#1d1e26,#101116)}
+.f-top .vents{position:absolute;left:3em;right:3em;top:2.2em;height:6em;border-radius:.4em;
+  background:repeating-linear-gradient(90deg,rgba(0,0,0,.6) 0 .28em,rgba(255,255,255,.035) .28em .9em);opacity:.55}
+.f-top .mark{position:absolute;left:3.2em;bottom:3.2em;font:300 3.1em/1 var(--font-ui);letter-spacing:.16em;color:#cfd7ea;
+  text-shadow:0 .03em 0 rgba(255,255,255,.25);transition:text-shadow 1.2s}
+.f-top .mark b{font-weight:600;font-size:.7em;vertical-align:.55em;margin-left:.2em;letter-spacing:0}
+.is-on .f-top .mark{text-shadow:0 0 .6em rgba(110,160,255,.95)}
+.f-top .sheen{position:absolute;inset:0;border-radius:inherit;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.07) 46%,transparent 60%)}
+
+.tray-slot{position:absolute;left:2.4em;top:6.15em;width:20em;height:2.4em;border-radius:.35em;background:#040407;
+  box-shadow:inset 0 .25em .5em #000,0 0 0 .1em rgba(255,255,255,.07)}
+.led{position:absolute;left:24.6em;top:2.9em;width:.8em;height:.8em;border-radius:50%;background:#d9640a;box-shadow:0 0 .9em #f97316;transition:background .4s,box-shadow .4s}
+.is-on .led{background:#3ddc84;box-shadow:0 0 1em #3ddc84}
+.eject{position:absolute;left:24.3em;top:6.3em;width:1.9em;height:1.9em;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#3a3d4a,#15161c);box-shadow:inset 0 0 0 .12em #0a0a0d,0 .1em .2em rgba(0,0,0,.6)}
+.eject::after{content:"";position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);border:.4em solid transparent;border-bottom:.55em solid #8a90a3;border-top:0}
+.reset{position:absolute;left:24.85em;top:4.4em;width:.9em;height:.9em;border-radius:50%;background:radial-gradient(circle at 35% 30%,#3a3d4a,#15161c);box-shadow:inset 0 0 0 .1em #0a0a0d}
+.port{position:absolute;top:2.2em;width:5.4em;height:3.7em;border-radius:.5em;background:#06070a;box-shadow:inset 0 .2em .5em #000,0 0 0 .12em #2a2d38}
+.port::after{content:"";position:absolute;left:1.1em;right:1.1em;top:1.1em;height:1.5em;border-radius:.2em;background:repeating-linear-gradient(90deg,#3b3f4d 0 .18em,transparent .18em .5em)}
+.p1{left:28.4em}.p2{left:34.4em}
+.card{position:absolute;top:7em;width:4.9em;height:1.3em;border-radius:.3em;background:#06070a;box-shadow:inset 0 .15em .3em #000,0 0 0 .1em #2a2d38}
+.c1{left:28.7em}.c2{left:34.7em}
+
+/* Bandeja: se desliza sobre el eje Z real */
+.tray{position:absolute;left:2.6em;top:0;width:19.6em;height:11.4em;transform-style:preserve-3d;
+  transform:translateZ(13.33em);transition:transform 1.3s cubic-bezier(.62,0,.22,1)}
+.is-open .tray{transform:translateZ(30.75em)}
+.tray-lip{position:absolute;left:0;top:6.25em;width:19.6em;height:2.2em;border-radius:.25em .25em .4em .4em;
+  background:linear-gradient(180deg,#2a2c37,#14151b);box-shadow:inset 0 .12em 0 rgba(255,255,255,.16),0 .15em .4em rgba(0,0,0,.5)}
+.tray-lip::after{content:"";position:absolute;left:36%;right:36%;top:50%;height:.14em;background:rgba(255,255,255,.12);border-radius:1em}
+.tray-plate{position:absolute;left:0;top:-3.25em;width:19.6em;height:19em;transform-style:preserve-3d;
+  transform:translateZ(-9.5em) rotateX(90deg);border-radius:.5em .5em .3em .3em;
+  background:linear-gradient(180deg,#1e2029,#13141a);box-shadow:inset 0 0 0 .12em rgba(255,255,255,.07)}
+.tray-plate::before{content:"";position:absolute;left:.6em;top:.3em;width:18.4em;height:18.4em;border-radius:50%;
+  background:radial-gradient(circle closest-side,#07080b 0 93%,#2a2d38 94% 97%,transparent 98%);transform:translateZ(.04em)}
+.tray-plate::after{content:"";position:absolute;left:.6em;top:.3em;width:18.4em;height:18.4em;border-radius:50%;border:.16em dashed transparent;
+  transform:translateZ(.08em);transition:border-color .25s,box-shadow .25s}
+.is-open:not(.is-armed):not(.is-busy) .tray-plate::after{animation:breathe 3.8s ease-in-out infinite}
+.is-armed .tray-plate::after{border-color:rgba(141,176,255,.6);animation:ring 16s linear infinite}
+.is-target .tray-plate::after{border-color:#a9c4ff;box-shadow:0 0 2.2em rgba(61,123,255,.85),inset 0 0 2em rgba(61,123,255,.55)}
+@keyframes ring{from{transform:translateZ(.08em) rotate(0)}to{transform:translateZ(.08em) rotate(360deg)}}
+@keyframes breathe{0%,100%{box-shadow:0 0 0 rgba(61,123,255,0)}50%{box-shadow:0 0 1.6em rgba(61,123,255,.5),inset 0 0 1.2em rgba(61,123,255,.3);border-color:rgba(141,176,255,.35)}}
+
+/* Disco */
+.disc{position:absolute;left:1.3em;top:1em;width:17em;height:17em;border-radius:50%;opacity:0;transform:translateZ(14em);
+  background:
+    radial-gradient(circle closest-side at 50% 50%,transparent 0 12%,rgba(232,238,250,.6) 12.5% 27%,transparent 27.5%),
+    radial-gradient(circle closest-side at 50% 50%,transparent 0 27.5%,hsl(var(--h,220),62%,30%) 28% 95%,transparent 95.5%),
+    conic-gradient(from 30deg,#e9edf6,#aab8d6,#f7f9fd,#c6b8e4,#a6d7ea,#f3f6fb,#e9edf6);
+  -webkit-mask:radial-gradient(circle closest-side at 50% 50%,transparent 0 12%,#000 12.6%);
+          mask:radial-gradient(circle closest-side at 50% 50%,transparent 0 12%,#000 12.6%)}
+.disc::after{content:"";position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 200deg,transparent 0 20%,rgba(255,255,255,.24) 26%,transparent 34% 70%,rgba(255,255,255,.18) 76%,transparent 84%)}
+.disc-label{position:absolute;left:12%;right:12%;top:63%;text-align:center;z-index:1}
+.disc-t{display:block;font:800 1.25em/1 var(--font-display);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 .05em .1em rgba(0,0,0,.5)}
+.disc-s{display:block;margin-top:.35em;font:500 .5em/1 var(--font-ui);letter-spacing:.22em;color:rgba(255,255,255,.72)}
+.disc.is-in{animation:disc-in .95s cubic-bezier(.2,.75,.2,1) forwards}
+.disc.is-out{animation:disc-out .55s ease-in forwards}
+@keyframes disc-in{0%{opacity:0;transform:translateZ(16em) rotate(-40deg) scale(.5)}55%{opacity:1}100%{opacity:1;transform:translateZ(.3em) rotate(0) scale(1)}}
+@keyframes disc-out{0%{opacity:1;transform:translateZ(.3em) scale(1)}100%{opacity:0;transform:translateZ(9em) scale(.8)}}
+
+/* ═════════════ ARRANQUE, REPRODUCTOR, CONTROLES ═════════════ */
+.curtain{position:fixed;inset:0;z-index:19;background:#02030a;opacity:0;pointer-events:none;transition:opacity .35s ease}
+.curtain.is-on{opacity:1}
+.boot{position:fixed;inset:0;z-index:20;display:grid;place-items:center;overflow:hidden;
+  background:radial-gradient(120% 90% at 50% 100%,#0a1a5c 0,#040720 45%,#01020a 100%);
+  opacity:0;visibility:hidden;transition:opacity .7s ease,visibility 0s .7s}
+.boot.is-visible{opacity:1;visibility:visible;transition:opacity .7s ease,visibility 0s}
+.towers{position:absolute;inset:0;pointer-events:none}
+.towers i{position:absolute;bottom:0;left:var(--x);width:var(--w);height:var(--h);opacity:var(--o);transform-origin:bottom;
+  background:linear-gradient(0deg,rgba(141,176,255,0),rgba(141,176,255,.38) 55%,rgba(220,235,255,.7));animation:tower var(--t) ease-in-out var(--d) infinite alternate}
+@keyframes tower{from{transform:scaleY(.22)}to{transform:scaleY(1)}}
+.boot-center{position:relative;text-align:center;padding:0 20px}
+.boot-mark{font:300 clamp(2.2rem,6.4vw,5rem)/1 var(--font-ui);letter-spacing:.32em;text-indent:.32em;color:#eef3ff;text-shadow:0 0 30px rgba(120,160,255,.8);opacity:0;transform:translateY(8px)}
+.boot-mark b{font-weight:600;font-size:.62em;vertical-align:.7em;margin-left:.15em;letter-spacing:0}
+.boot.is-visible .boot-mark{animation:mark-in 1.6s .9s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes mark-in{to{opacity:1;transform:none}}
+.boot-line{margin-top:1.8rem;color:#b9c8ee;font-size:1rem;letter-spacing:.08em;opacity:0}
+.boot-game{margin-top:.4rem;font:800 clamp(1.3rem,3vw,1.9rem)/1.1 var(--font-display);color:#fff;letter-spacing:.02em;opacity:0}
+.boot.is-visible .boot-line,.boot.is-visible .boot-game{animation:mark-in .9s 1.9s ease forwards}
+.boot-bar{width:min(320px,60vw);height:3px;margin:1.6rem auto 0;background:rgba(255,255,255,.14);border-radius:3px;overflow:hidden;opacity:0}
+.boot.is-visible .boot-bar{animation:mark-in .6s 1.9s ease forwards}
+.boot-bar i{display:block;height:100%;width:100%;transform-origin:left;transform:scaleX(0);background:linear-gradient(90deg,#4d8dff,#bcd3ff)}
+.boot.is-visible .boot-bar i{animation:bar var(--boot-ms,4200ms) cubic-bezier(.3,.6,.3,1) forwards}
+@keyframes bar{to{transform:scaleX(.96)}}
+
+.player{position:fixed;inset:0;z-index:5;background:#000;visibility:hidden;opacity:0}
+.is-playing .player{visibility:visible;opacity:1}
+.player-stage{position:absolute;inset:0}
+.player-stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
+.player-error{position:absolute;inset:0;z-index:2;display:none;place-items:center;padding:20px;background:rgba(2,4,12,.88);backdrop-filter:blur(6px)}
+.player-error.is-visible{display:grid}
+.err-card{width:min(540px,100%);max-height:100%;overflow:auto;padding:26px 26px 22px;border-radius:14px;background:#0e1424;border:1px solid rgba(141,176,255,.25);box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.err-card h2{margin:0 0 .5rem;font:800 1.9rem/1 var(--font-display);color:#fff}
+.err-card p{margin:0 0 .8rem;color:var(--ink-dim);line-height:1.5;font-size:.95rem;word-break:break-word}
+.err-card ul{margin:0 0 1.2rem;padding-left:1.1rem;color:#c3cde4;font-size:.88rem;line-height:1.5}
+.err-card li+li{margin-top:.4rem}
+.err-card code{font-size:.85em;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,.08)}
+.err-actions{display:flex;flex-wrap:wrap;gap:10px}
+.btn{display:inline-block;border:1px solid rgba(141,176,255,.35);background:rgba(61,123,255,.16);color:#fff;border-radius:9px;padding:9px 15px;font-size:.9rem;text-decoration:none;line-height:1.2}
+.btn:hover{background:rgba(61,123,255,.38)}
+.btn.primary{background:var(--blue);border-color:var(--blue)}
+
+.fabs{position:fixed;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));z-index:30;display:flex;gap:10px}
+.fab{position:relative;width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.16);display:grid;place-items:center;
+  background:rgba(14,18,32,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:background .2s,border-color .2s,opacity .2s}
+.fab:hover{background:rgba(61,123,255,.38);border-color:rgba(141,176,255,.6)}
+.fab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.fab::after{content:attr(data-tip);position:absolute;top:calc(100% + 8px);right:0;white-space:nowrap;font-size:.75rem;padding:5px 9px;border-radius:6px;
+  background:rgba(8,11,22,.94);opacity:0;transform:translateY(-4px);transition:.15s;pointer-events:none}
+.fab:hover::after,.fab:focus-visible::after{opacity:1;transform:none}
+.fab-play{display:none}
+.is-playing .fab-play{display:grid}
+.is-playing .fab{opacity:.55}
+.is-playing .fab:hover,.is-playing .fab:focus-visible{opacity:1}
+.ico-exit-fs{display:none}
+.is-fs .ico-enter-fs{display:none}
+.is-fs .ico-exit-fs{display:block}
+
+.toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));z-index:40;transform:translate(-50%,20px);max-width:min(90vw,480px);
+  padding:10px 16px;border-radius:10px;background:rgba(10,14,26,.95);border:1px solid rgba(255,255,255,.14);font-size:.9rem;line-height:1.4;
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+.toast.is-on{opacity:1;transform:translate(-50%,0)}
+
+.ghost{position:fixed;left:0;top:0;z-index:100;pointer-events:none;scale:1.05;rotate:-3deg;transition:scale .18s,rotate .18s;
+  filter:drop-shadow(0 18px 24px rgba(0,0,0,.6));will-change:translate}
+.ghost.is-over{scale:.62;rotate:0deg}
+.ghost .case,.ghost .sleeve{transform:none!important}
+
+/* ═════════════ RESPONSIVE ═════════════ */
+@media (max-width:900px) and (orientation:portrait){
+  body{overflow:auto}
+  .scene{height:max(100dvh,780px)}
+  .intro{left:16px;right:70px;width:auto;top:16px}
+  .intro h1{font-size:2rem;margin-bottom:.4rem}
+  .intro p{font-size:.85rem}
+  .intro .intro-alt,.intro-meta .status{display:none}
+  .ps2-stage{top:140px;bottom:auto}
+  .desk{top:205px}
+  .shelf{left:50%;right:auto;top:auto;bottom:18px;transform:translateX(-50%);max-height:none;overflow:visible}
+  .lamp{display:none}
+}
+@media (max-height:560px) and (orientation:landscape){
+  body{overflow:auto}
+  .scene{height:560px}
+}
+@media (prefers-reduced-motion:reduce){
+  .tray{transition-duration:.01s}
+  .towers i,.tray-plate::after{animation:none!important}
+  .disc.is-in,.disc.is-out{animation-duration:.01s}
+}
+</style>
+</head>
+
+<body>
+
+<!-- ═════════════ MESA ═════════════ -->
+<main class="scene is-open" id="scene" aria-label="Mesa de juegos">
+  <div class="wall"></div>
+  <div class="desk"></div>
+  <div class="desk-glow"></div>
+
+  <section class="intro">
+    <h1>Mesa de juegos</h1>
+    <p>Arrastra un disco de la estantería hasta la bandeja de la PS2 para encenderla.</p>
+    <p class="intro-alt">¿Tienes tu propia ISO? Suéltala sobre la bandeja o usa el sobre de la estantería.</p>
+    <div class="intro-meta">
+      <span class="status" id="isoStatus" data-ok="false" role="status"></span>
+      <button class="linklike" id="soundBtn" type="button" aria-pressed="true">Sonido activado</button>
+    </div>
+  </section>
+
+  <!-- Consola: cuboide CSS 3D con bandeja real en el eje Z -->
+  <div class="ps2-stage" aria-hidden="true">
+    <div class="ps2-shadow"></div>
+    <div class="ps2" id="ps2">
+      <div class="face f-top"><div class="vents"></div><div class="mark">PlayStation<b>2</b></div><div class="sheen"></div></div>
+      <div class="face f-right"></div>
+      <div class="face f-front">
+        <div class="tray-slot"></div>
+        <i class="led"></i><i class="eject"></i><i class="reset"></i>
+        <i class="port p1"></i><i class="port p2"></i><i class="card c1"></i><i class="card c2"></i>
+      </div>
+      <div class="tray">
+        <div class="tray-plate" id="plate">
+          <div class="disc" id="disc">
+            <div class="disc-label"><span class="disc-t" id="discTitle"></span><span class="disc-s">PlayStation 2</span></div>
+          </div>
+        </div>
+        <div class="tray-lip"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lamp" aria-hidden="true"></div>
+  <aside class="shelf" aria-label="Estantería de juegos"><div id="shelfRows"></div></aside>
+</main>
+
+<div class="curtain" id="curtain"></div>
+
+<!-- ═════════════ REPRODUCTOR ═════════════ -->
+<div class="player" id="player">
+  <div class="player-stage" id="playerStage"></div>
+  <div class="player-error" id="playerError" role="alert">
+    <div class="err-card">
+      <h2 id="errTitle">No se pudo iniciar el juego</h2>
+      <p id="errMsg"></p>
+      <ul id="errTips"></ul>
+      <div class="err-actions">
+        <button class="btn primary" id="errBack" type="button">Volver a la mesa</button>
+        <button class="btn" id="errRetry" type="button">Reintentar</button>
+        <a class="btn" id="errFallback" target="_blank" rel="noopener">Abrir Play! Web</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════════ PANTALLA DE ARRANQUE ═════════════ -->
+<div class="boot" id="boot" role="status" aria-live="polite">
+  <div class="towers" id="towers"></div>
+  <div class="boot-center">
+    <div class="boot-mark">PlayStation<b>2</b></div>
+    <div class="boot-line">Loading PlayStation 2...</div>
+    <div class="boot-game" id="bootGame"></div>
+    <div class="boot-bar"><i></i></div>
+  </div>
+</div>
+
+<!-- ═════════════ BOTONES FLOTANTES ═════════════ -->
+<div class="fabs">
+  <button class="fab fab-play" id="fabExit" type="button" data-tip="Volver a la mesa" aria-label="Volver a la mesa">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5"/><path d="M15 8l4 4-4 4M9 12h10"/></svg>
+  </button>
+  <button class="fab fab-play" id="fabRestart" type="button" data-tip="Reiniciar consola" aria-label="Reiniciar consola">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></svg>
+  </button>
+  <button class="fab" id="fabFs" type="button" data-tip="Pantalla completa" aria-label="Pantalla completa">
+    <svg class="ico-enter-fs" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    <svg class="ico-exit-fs" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+  </button>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="filePicker" accept=".iso,.bin,.chd,.cso,.cue,.isz,.elf" hidden>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   CONFIGURACIÓN — edita aquí
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// Juegos de la estantería. Reemplaza portada e isoUrl por enlaces reales.
+// Si la portada no carga, se genera una carátula de respaldo automáticamente.
+const juegos = [
+  { id: 'juego1', titulo: 'Silent Hill Origins', portada: 'https://imgs.search.brave.com/9V8y0Ewcazj5Cg4v1HZ2k7yNv_gZwWP8Oc9_mp0ALqc/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly93d3cu/Z2FtZXNneC5uZXQv/cGJwcmJhdnIvc2ls/ZW50LWhpbGwtb3Jp/Z2lucy5qcGc', isoUrl: 'https://www.mediafire.com/file/nzauabrrad8vf5m/Silent+Hill+Origins.iso' },
+  { id: 'juego2', titulo: 'Juego 2', portada: 'url_portada.jpg', isoUrl: 'https://archive.org/.../juego2.iso' },
+  { id: 'juego3', titulo: 'Juego 3', portada: 'url_portada.jpg', isoUrl: 'https://archive.org/.../juego3.iso' },
+  { id: 'juego4', titulo: 'Juego 4', portada: 'url_portada.jpg', isoUrl: 'https://archive.org/.../juego4.iso' }
+];
+
+// Motor. OJO: el CDN oficial de EmulatorJS no publica un core "play" (PS2).
+// Si dispones de una build de EmulatorJS que lo incluya, apunta dataPath a ella.
+const EMULADOR = {
+  core: 'play',
+  dataPath: 'https://cdn.emulatorjs.org/stable/data/',   // debe terminar en "/"
+  idioma: 'es-ES',
+  color: '#3d7bff',
+  respaldoUrl: 'https://playjs.purei.org/'                // Play! para navegador (oficial)
+};
+
+const EXT_OK = ['iso', 'bin', 'chd', 'cso', 'cue', 'isz', 'elf'];
+const POR_FILA = 3;
+
+/* ═══════════════════════════════════════════════════════════════════════
+   APP
+   ═══════════════════════════════════════════════════════════════════════ */
+(() => {
+'use strict';
+
+const $  = (s, r = document) => r.querySelector(s);
+const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const wait = ms => new Promise(r => setTimeout(r, RM ? ms * .4 : ms));
+
+const scene = $('#scene'), rows = $('#shelfRows'), plate = $('#plate'), disc = $('#disc'), discTitle = $('#discTitle');
+const bootEl = $('#boot'), bootGame = $('#bootGame'), curtain = $('#curtain');
+const stage = $('#playerStage'), errBox = $('#playerError'), toastEl = $('#toast'), picker = $('#filePicker');
+
+let state = 'idle';          // idle | loading | running | error | exiting
+let session = 0;             // se incrementa para cancelar secuencias en curso
+let current = null;          // juego insertado
+let custom = null;           // { file, url, item }
+let emu = null, watchdog = 0, hintShown = false;
+
+const setState = s => { state = s; scene.classList.toggle('is-busy', s !== 'idle'); };
+const isOpen = () => scene.classList.contains('is-open');
+
+/* ── Utilidades ───────────────────────────────────────────────────────── */
+const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+const hueOf = id => hash(id) % 360;
+const fmtSize = n => n >= 1e9 ? (n / 1e9).toFixed(1).replace('.', ',') + ' GB' : Math.max(1, Math.round(n / 1e6)) + ' MB';
+
+let toastT = 0;
+function toast(msg, ms = 3800) {
+  toastEl.textContent = msg; toastEl.classList.add('is-on');
+  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('is-on'), ms);
+}
+
+// Carátula generada (SVG) cuando la portada no existe o no carga
+function coverArt(id) {
+  const h = hueOf(id), h2 = (h + 48) % 360, k = hash(id + 'k') % 3;
+  let s;
+  if (k === 0) s = `<circle cx="72" cy="88" r="36" fill="hsl(${h2},90%,68%)" opacity=".92"/><path d="M0 200L46 126L82 168L118 108L160 200Z" fill="hsl(${h},60%,12%)" opacity=".85"/>`;
+  else if (k === 1) s = `<path d="M-10 60L170 10V42L-10 100Z" fill="hsl(${h2},95%,62%)" opacity=".88"/><path d="M-10 122L170 72V96L-10 154Z" fill="hsl(${h2},80%,78%)" opacity=".5"/>`;
+  else s = `<circle cx="80" cy="96" r="58" fill="none" stroke="hsl(${h2},90%,70%)" stroke-width="6" opacity=".8"/><circle cx="80" cy="96" r="36" fill="none" stroke="hsl(${h2},90%,70%)" stroke-width="3" opacity=".6"/><circle cx="80" cy="96" r="12" fill="hsl(${h2},95%,75%)"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 200" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${h},70%,38%)"/><stop offset="1" stop-color="hsl(${(h + 300) % 360},70%,14%)"/></linearGradient></defs><rect width="160" height="200" fill="url(#g)"/>${s}</svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+/* ── Sonido sintetizado (WebAudio, sin archivos externos) ─────────────── */
+const sfx = (() => {
+  let ctx = null, muted = false;
+  const get = () => {
+    if (muted) return null;
+    try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === 'suspended') ctx.resume(); } catch (_) { return null; }
+    return ctx;
+  };
+  const tone = (type, f0, f1, t, dur, peak, dest) => {
+    const c = ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + .012); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g); g.connect(dest || c.destination); o.start(t); o.stop(t + dur + .05);
+  };
+  return {
+    unlock() { get(); },
+    setMuted(v) { muted = v; },
+    isMuted: () => muted,
+    pick()  { const c = get(); if (c) tone('triangle', 520, 780, c.currentTime, .12, .05); },
+    click() { const c = get(); if (c) tone('square', 180, 70, c.currentTime, .09, .05); },
+    whirr(sec = 1.2) {
+      const c = get(); if (!c) return; const t = c.currentTime;
+      const o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(52, t);
+      o.frequency.linearRampToValueAtTime(90, t + sec * .45); o.frequency.linearRampToValueAtTime(58, t + sec);
+      f.type = 'lowpass'; f.frequency.value = 380;
+      g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.05, t + .12); g.gain.linearRampToValueAtTime(.0001, t + sec);
+      o.connect(f); f.connect(g); g.connect(c.destination); o.start(t); o.stop(t + sec + .05);
+    },
+    chime() {
+      const c = get(); if (!c) return; const t = c.currentTime;
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800; lp.connect(c.destination);
+      [261.6, 392, 523.3, 784].forEach((f, i) => {
+        const o = c.createOscillator(), g = c.createGain(), t0 = t + i * .28;
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(.05, t0 + 1.1); g.gain.exponentialRampToValueAtTime(.0001, t0 + 3.4);
+        o.connect(g); g.connect(lp); o.start(t0); o.stop(t0 + 3.5);
+      });
+    }
+  };
+})();
+
+/* ── Estantería ───────────────────────────────────────────────────────── */
+const slotOf = id => rows.querySelector('.nook[data-id="' + CSS.escape(id) + '"]');
+
+function buildCase(game) {
+  const nook = el('div', 'nook'); nook.dataset.id = game.id;
+  const c = el('div', 'case'); c.tabIndex = 0; c.setAttribute('role', 'button');
+  c.setAttribute('aria-label', `${game.titulo}. Arrástralo hasta la bandeja de la PS2 o pulsa Enter para insertarlo.`);
+  c.innerHTML = '<div class="case-face"><div class="case-band"><span aria-hidden="true">PlayStation<b>2</b></span><i></i></div><img class="case-art" alt="" draggable="false" decoding="async"><div class="case-title"></div></div>';
+  const img = $('img', c); img.referrerPolicy = 'no-referrer';
+  img.addEventListener('error', () => { if (!img.dataset.fb) { img.dataset.fb = '1'; img.src = coverArt(game.id); } });
+  img.src = game.portada || coverArt(game.id);
+  $('.case-title', c).textContent = game.titulo;
+  c.title = game.titulo;
+  nook.appendChild(c);
+  attachDrag(c, nook, () => game, () => {
+    if (!hintShown) { hintShown = true; toast('Arrastra la caja hasta la bandeja de la consola.'); }
+  });
+  c.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertGame(game, null); } });
+  return nook;
+}
+
+function buildSleeve() {
+  const nook = el('div', 'nook'); nook.dataset.id = 'custom';
+  const s = el('div', 'sleeve'); s.tabIndex = 0; s.setAttribute('role', 'button');
+  s.setAttribute('aria-label', 'ISO propia: elegir un archivo de tu equipo');
+  s.innerHTML = '<div class="sleeve-window"><div class="sleeve-disc"></div></div><div class="sleeve-name">ISO propia</div><div class="sleeve-sub">Elegir archivo</div>';
+  const ch = el('button', 'sleeve-change', 'Cambiar'); ch.type = 'button'; ch.hidden = true;
+  ch.addEventListener('click', () => picker.click());
+  nook.append(s, ch);
+  attachDrag(s, nook, () => custom && custom.item, () => { if (!custom) picker.click(); });
+  s.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault(); custom ? insertGame(custom.item, null) : picker.click();
+  });
+  return nook;
+}
+
+function buildShelf() {
+  const items = juegos.map(g => buildCase(g)); items.push(buildSleeve());
+  rows.innerHTML = '';
+  for (let i = 0; i < items.length; i += POR_FILA) {
+    const row = el('div', 'shelf-row'); items.slice(i, i + POR_FILA).forEach(n => row.appendChild(n));
+    rows.append(row, el('div', 'plank'));
+  }
+}
+
+/* ── ISO desde el PC ──────────────────────────────────────────────────── */
+function setCustomFile(f) {
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  if (!EXT_OK.includes(ext)) { toast('Formato .' + ext + ' no compatible. Usa ' + EXT_OK.map(x => '.' + x).join(', ') + '.'); return false; }
+  if (custom) URL.revokeObjectURL(custom.url);
+  const url = URL.createObjectURL(f);
+  custom = { file: f, url, item: { id: 'custom', titulo: f.name.replace(/\.[^.]+$/, ''), isoUrl: url, gameName: f.name, custom: true } };
+  const s = $('.sleeve'), nook = slotOf('custom');
+  s.classList.add('has-file');
+  $('.sleeve-name', s).textContent = custom.item.titulo;
+  $('.sleeve-sub', s).textContent = fmtSize(f.size);
+  $('.sleeve-change', nook).hidden = false;
+  s.setAttribute('aria-label', custom.item.titulo + ', ISO propia. Arrástrala hasta la bandeja o pulsa Enter para insertarla.');
+  return true;
+}
+picker.addEventListener('change', () => {
+  const f = picker.files && picker.files[0]; picker.value = '';
+  if (f && setCustomFile(f)) toast('ISO lista. Arrastra el sobre hasta la bandeja.');
+});
+
+/* ── Drag & drop (Pointer Events: ratón, táctil y lápiz) ──────────────── */
+function targetRect() {
+  const r = plate.getBoundingClientRect(), pad = Math.max(28, r.width * .18);
+  return { l: r.left - pad, r: r.right + pad, t: r.top - pad, b: r.bottom + pad };
+}
+const inTarget = (x, y) => { const r = targetRect(); return x >= r.l && x <= r.r && y >= r.t && y <= r.b; };
+
+function makeGhost(node, rect, offX, offY) {
+  const g = el('div', 'ghost');
+  g.style.width = rect.width + 'px'; g.style.height = rect.height + 'px';
+  g.style.transformOrigin = offX + 'px ' + offY + 'px';
+  const c = node.cloneNode(true);
+  ['tabindex', 'role', 'aria-label', 'title'].forEach(a => c.removeAttribute(a));
+  g.appendChild(c); document.body.appendChild(g);
+  g.style.translate = rect.left + 'px ' + rect.top + 'px';
+  return g;
+}
+
+function giveBack(ghost, rect, nook) {
+  const cs = getComputedStyle(ghost), done = () => { ghost.remove(); nook.classList.remove('is-dragging'); };
+  try {
+    ghost.animate([
+      { translate: cs.translate, scale: cs.scale, rotate: cs.rotate },
+      { translate: rect.left + 'px ' + rect.top + 'px', scale: '1', rotate: '0deg' }
+    ], { duration: RM ? 1 : 320, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'forwards' }).onfinish = done;
+  } catch (_) { done(); }
+}
+
+function flyToTray(info) {
+  const g = info.ghost, pr = plate.getBoundingClientRect(), cs = getComputedStyle(g);
+  const cx = pr.left + pr.width / 2, cy = pr.top + pr.height / 2, done = () => g.remove();
+  try {
+    g.animate([
+      { translate: cs.translate, scale: cs.scale, rotate: cs.rotate, opacity: 1 },
+      { translate: (cx - info.offX) + 'px ' + (cy - info.offY) + 'px', scale: '.28', rotate: '0deg', opacity: 0 }
+    ], { duration: RM ? 1 : 340, easing: 'cubic-bezier(.5,0,.75,.4)', fill: 'forwards' }).onfinish = done;
+  } catch (_) { done(); }
+}
+
+function attachDrag(node, nook, getItem, onTap) {
+  node.addEventListener('pointerdown', e => {
+    if (state !== 'idle' || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const rect = node.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, id = e.pointerId;
+    const offX = sx - rect.left, offY = sy - rect.top;
+    let ghost = null, over = false;
+
+    const move = ev => {
+      if (ev.pointerId !== id) return;
+      if (!ghost) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6 || !getItem()) return;
+        ghost = makeGhost(node, rect, offX, offY);
+        nook.classList.add('is-dragging'); scene.classList.add('is-armed'); sfx.pick();
+      }
+      ghost.style.translate = (ev.clientX - offX) + 'px ' + (ev.clientY - offY) + 'px';
+      const now = inTarget(ev.clientX, ev.clientY);
+      if (now !== over) { over = now; scene.classList.toggle('is-target', over); ghost.classList.toggle('is-over', over); }
+    };
+    const end = ev => {
+      if (ev.pointerId !== id) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      scene.classList.remove('is-armed', 'is-target');
+      if (!ghost) { if (ev.type === 'pointerup' && onTap) onTap(); return; }
+      if (ev.type === 'pointerup' && over && isOpen() && state === 'idle') insertGame(getItem(), { ghost, offX, offY, nook });
+      else giveBack(ghost, rect, nook);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  });
+}
+
+// Archivos arrastrados desde el sistema operativo
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+window.addEventListener('dragenter', e => { if (hasFiles(e)) { e.preventDefault(); dragDepth++; } });
+window.addEventListener('dragover', e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  if (state === 'idle') { scene.classList.add('is-armed'); scene.classList.toggle('is-target', isOpen() && inTarget(e.clientX, e.clientY)); }
+});
+window.addEventListener('dragleave', e => {
+  if (!hasFiles(e)) return;
+  if (--dragDepth <= 0) { dragDepth = 0; scene.classList.remove('is-armed', 'is-target'); }
+});
+window.addEventListener('drop', e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); dragDepth = 0; scene.classList.remove('is-armed', 'is-target');
+  if (state !== 'idle') return;
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f || !setCustomFile(f)) return;
+  if (isOpen() && inTarget(e.clientX, e.clientY)) insertGame(custom.item, null);
+  else toast('ISO lista. Arrastra el sobre hasta la bandeja.');
+});
+
+/* ── Secuencia: insertar → cerrar tapa → arrancar ─────────────────────── */
+function paintDisc(game) {
+  disc.style.setProperty('--h', game.custom ? 215 : hueOf(game.id));
+  discTitle.textContent = game.titulo;
+  disc.classList.remove('is-in', 'is-out'); void disc.offsetWidth;
+}
+
+async function insertGame(game, from) {
+  if (state !== 'idle' || !isOpen()) return;
+  setState('loading'); current = game;
+  const sid = ++session, nook = (from && from.nook) || slotOf(game.id);
+  sfx.unlock();
+  nook.classList.add('is-empty'); nook.classList.remove('is-dragging');
+  paintDisc(game);
+  if (from) { flyToTray(from); await wait(300); } else await wait(80);
+  if (sid !== session) return;
+  disc.classList.add('is-in'); sfx.click();                    // el disco cae en la bandeja
+  await wait(1000); if (sid !== session) return;
+  scene.classList.remove('is-open'); sfx.whirr(1.3);           // la tapa se cierra
+  await wait(1500); if (sid !== session) return;
+  scene.classList.add('is-on');                                // LED verde + brillo azul
+  await wait(500); if (sid !== session) return;
+  runBoot(game, sid, true);
+}
+
+async function runBoot(game, sid, long) {
+  const ms = long ? 4300 : 2100;
+  bootGame.textContent = game.titulo;
+  bootEl.style.setProperty('--boot-ms', ms + 'ms');
+  bootEl.classList.remove('is-visible'); void bootEl.offsetWidth; bootEl.classList.add('is-visible');
+  sfx.chime();
+  await wait(750); if (sid !== session) return;
+  document.body.classList.add('is-playing');                   // se oculta la mesa
+  mountEmulator(game);
+  await wait(ms - 750); if (sid !== session) return;
+  bootEl.classList.remove('is-visible');
+}
+
+/* ── Emulador (EmulatorJS dentro de un iframe desechable) ─────────────── */
+function emuDoc(game) {
+  const cfg = {
+    core: EMULADOR.core, url: game.isoUrl, name: game.gameName || game.titulo,
+    path: EMULADOR.dataPath, lang: EMULADOR.idioma, color: EMULADOR.color,
+    threads: window.crossOriginIsolated === true
+  };
+  const json = JSON.stringify(cfg).replace(/</g, '\\u003c');
+  return '<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#game{width:100%;height:100%}</style></head><body><div id="game"></div>' +
+  '<script>(function(){var C=' + json + ';' +
+  'var post=function(t,m){try{parent.postMessage({ps2table:true,type:t,message:m||""},"*")}catch(e){}};' +
+  'window.EJS_player="#game";window.EJS_core=C.core;window.EJS_gameUrl=C.url;window.EJS_gameName=C.name;' +
+  'window.EJS_pathtodata=C.path;window.EJS_language=C.lang;window.EJS_color=C.color;window.EJS_backgroundColor="#000000";' +
+  'window.EJS_threads=C.threads;window.EJS_startOnLoaded=true;' +
+  'window.EJS_onGameStart=function(){post("start")};' +
+  'window.addEventListener("error",function(e){var t=e.target;if(t&&t.tagName==="SCRIPT"&&/loader\\.js|emulator/.test(t.src||""))post("error","No se pudo cargar el motor desde "+t.src)},true);' +
+  'var iv=setInterval(function(){try{var g=document.getElementById("game"),bad=g&&g.querySelector(".ejs_error_text");' +
+  'if(bad||(window.EJS_emulator&&window.EJS_emulator.failedToStart)){clearInterval(iv);post("error",bad?bad.textContent:"")}}catch(e){}},700);' +
+  '})();<\/script><script src="' + EMULADOR.dataPath + 'loader.js"><\/script></body></html>';
+}
+
+function mountEmulator(game) {
+  unmountEmulator(); errBox.classList.remove('is-visible');
+  const url = String(game.isoUrl || '');
+  if (!/^(https?:|blob:)/.test(url) || url.includes('...')) {
+    showEmuError('La isoUrl de «' + game.titulo + '» todavía es una plantilla.', [
+      'Abre <code>index.html</code> y reemplaza <code>isoUrl</code> en el arreglo <code>juegos</code> por un enlace directo a tu ISO.',
+      'Mientras tanto, puedes cargar un archivo de tu PC con el sobre «ISO propia».'
+    ]);
+    return;
+  }
+  const f = document.createElement('iframe');
+  f.title = 'Emulador PlayStation 2';
+  f.setAttribute('allow', 'autoplay; fullscreen; gamepad');
+  f.setAttribute('allowfullscreen', '');
+  f.srcdoc = emuDoc(game);
+  stage.appendChild(f);
+  emu = { frame: f, started: false };
+  setState('running');
+  watchdog = setTimeout(() => {
+    if (emu && !emu.started && state === 'running') toast('Está tardando en arrancar. Las ISO grandes pueden tardar varios minutos en descargarse.', 7000);
+  }, 60000);
+}
+
+function unmountEmulator() {
+  clearTimeout(watchdog);
+  if (emu && emu.frame) emu.frame.remove();
+  emu = null; stage.innerHTML = '';
+}
+
+function showEmuError(msg, tips) {
+  clearTimeout(watchdog);
+  bootEl.classList.remove('is-visible');
+  document.body.classList.add('is-playing');
+  setState('error');
+  $('#errMsg').textContent = msg || 'El emulador no respondió.';
+  $('#errTips').innerHTML = (tips || [
+    'EmulatorJS no publica un core de PS2 en su CDN oficial. Para usar <code>play</code>, apunta <code>EMULADOR.dataPath</code> a una build que lo incluya.',
+    'Comprueba que el enlace de la ISO sea directo al archivo y que su servidor permita CORS.',
+    'Si el indicador de aislamiento COOP/COEP aparece inactivo, sube <code>coi-serviceworker.js</code> junto a <code>index.html</code>.'
+  ]).map(t => '<li>' + t + '</li>').join('');
+  $('#errFallback').href = EMULADOR.respaldoUrl;
+  errBox.classList.add('is-visible');
+}
+
+window.addEventListener('message', e => {
+  const d = e.data;
+  if (!d || d.ps2table !== true || !emu || e.source !== emu.frame.contentWindow) return;
+  if (d.type === 'start') { emu.started = true; clearTimeout(watchdog); }
+  else if (d.type === 'error' && !emu.started) showEmuError(d.message);
+});
+
+/* ── Controles: reiniciar y salir ─────────────────────────────────────── */
+function restart() {
+  if (!current || (state !== 'running' && state !== 'error')) return;
+  errBox.classList.remove('is-visible');
+  runBoot(current, ++session, false);
+}
+
+async function exitToTable() {
+  if (state !== 'running' && state !== 'error') return;
+  const sid = ++session, g = current; setState('exiting');
+  curtain.classList.add('is-on'); await wait(380); if (sid !== session) return;
+  bootEl.style.transition = 'none'; bootEl.classList.remove('is-visible'); void bootEl.offsetWidth; bootEl.style.transition = '';
+  unmountEmulator(); errBox.classList.remove('is-visible');
+  document.body.classList.remove('is-playing');
+  scene.classList.remove('is-on');
+  curtain.classList.remove('is-on');
+  await wait(700); if (sid !== session) return;
+  scene.classList.add('is-open'); sfx.whirr(1.2);              // la bandeja vuelve a salir
+  await wait(1400); if (sid !== session) return;
+  disc.classList.remove('is-in'); disc.classList.add('is-out');
+  await wait(550); if (sid !== session) return;
+  slotOf(g.id).classList.remove('is-empty');                   // el disco vuelve a su caja
+  disc.classList.remove('is-out');
+  current = null; setState('idle');
+}
+
+/* ── Pantalla completa ────────────────────────────────────────────────── */
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+function toggleFs() {
+  const de = document.documentElement;
+  if (fsEl()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+  const req = de.requestFullscreen || de.webkitRequestFullscreen;
+  if (!req) { toast('Tu navegador no permite pantalla completa aquí.'); return; }
+  const p = req.call(de); if (p && p.catch) p.catch(() => toast('No se pudo activar la pantalla completa.'));
+}
+function syncFs() {
+  const on = !!fsEl(), b = $('#fabFs');
+  document.body.classList.toggle('is-fs', on);
+  b.dataset.tip = on ? 'Salir de pantalla completa' : 'Pantalla completa';
+  b.setAttribute('aria-label', b.dataset.tip);
+}
+document.addEventListener('fullscreenchange', syncFs);
+document.addEventListener('webkitfullscreenchange', syncFs);
+
+$('#fabFs').addEventListener('click', toggleFs);
+$('#fabRestart').addEventListener('click', restart);
+$('#fabExit').addEventListener('click', exitToTable);
+$('#errBack').addEventListener('click', exitToTable);
+$('#errRetry').addEventListener('click', restart);
+
+const soundBtn = $('#soundBtn');
+soundBtn.addEventListener('click', () => {
+  const m = !sfx.isMuted(); sfx.setMuted(m);
+  soundBtn.textContent = m ? 'Sonido desactivado' : 'Sonido activado';
+  soundBtn.setAttribute('aria-pressed', String(!m));
+});
+
+/* ── Arranque de la página ────────────────────────────────────────────── */
+function buildTowers() {
+  let h = '';
+  for (let i = 0; i < 26; i++) {
+    h += '<i style="--x:' + (i / 26 * 100 + (Math.random() * 3 - 1.5)).toFixed(2) + '%;--w:' + (1.2 + Math.random() * 2.6).toFixed(2) + 'vw;--h:' +
+         (28 + Math.random() * 62).toFixed(1) + '%;--d:' + (-Math.random() * 6).toFixed(2) + 's;--t:' + (3.6 + Math.random() * 4).toFixed(2) +
+         's;--o:' + (.25 + Math.random() * .55).toFixed(2) + '"></i>';
+  }
+  $('#towers').innerHTML = h;
+}
+
+(function init() {
+  buildShelf(); buildTowers(); syncFs();
+  const iso = window.crossOriginIsolated === true, s = $('#isoStatus');
+  s.dataset.ok = String(iso);
+  s.textContent = iso ? 'Aislamiento COOP/COEP activo' : 'Sin aislamiento COOP/COEP';
+  s.title = iso ? 'SharedArrayBuffer disponible.' : 'Sube coi-serviceworker.js junto a index.html y recarga (requiere HTTPS o localhost).';
+})();
+})();
+</script>
+</body>
+</html>
