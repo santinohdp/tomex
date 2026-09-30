@@ -621,6 +621,7 @@ function emuDoc(game) {
   'window.EJS_player="#game";window.EJS_core=C.core;window.EJS_gameUrl=C.url;window.EJS_gameName=C.name;' +
   'window.EJS_pathtodata=C.path;window.EJS_language=C.lang;window.EJS_color=C.color;window.EJS_backgroundColor="#000000";' +
   'window.EJS_threads=true;window.EJS_startOnLoaded=true;' +
+  'window.EJS_defaultOptions={"ppsspp_internal_resolution":"480x272","ppsspp_auto_frameskip":"enabled"};' +
   'window.EJS_onGameStart=function(){post("start")};' +
   'window.addEventListener("error",function(e){var t=e.target;if(t&&t.tagName==="SCRIPT"&&/loader\\.js|emulator/.test(t.src||""))post("error","No se pudo cargar el motor desde "+t.src)},true);' +
   'var iv=setInterval(function(){try{var g=document.getElementById("game"),bad=g&&g.querySelector(".ejs_error_text");' +
